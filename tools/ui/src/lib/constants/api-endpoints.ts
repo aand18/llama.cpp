@@ -22,3 +22,7 @@ export const API_TOOLS = {
 
 /** CORS proxy endpoint path */
 export const CORS_PROXY_ENDPOINT = '/cors-proxy';
+
+export const API_SLOTS = {
+	LIST: '/slots',
+};
