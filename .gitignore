@@ -152,5 +152,14 @@ a.out.*
 # AGENTS
 
 AGENTS.local.md
+a.out.*
+
+# AGENTS
+
+AGENTS.local.md
 .pi/SYSTEM.md
 .worktrees/
+
+# Debug artifacts
+
+/_debug/
