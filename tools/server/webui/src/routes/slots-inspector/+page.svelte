@@ -22,6 +22,7 @@
 	let pollInterval = $state(2000);
 	let tps = $state<Record<number, number>>({});
 	let prevDecoded = new Map<number, number>();
+	let prevTime = new Map<number, number>();
 	let protectedMap = $state(new Map<number, boolean>());
 
 	$effect(() => {
@@ -50,27 +51,33 @@
 		if (paused) {
 			slotsStore.stopPolling();
 			prevDecoded.clear();
+			prevTime.clear();
 		} else {
 			slotsStore.startPolling();
 		}
 	}
 
-	// Track tokens/sec from poll deltas
+	// Track tokens/sec from poll deltas, normalized by elapsed time
 	$effect(() => {
 		const currentSlots = slots();
 		const next: Record<number, number> = {};
 
 		for (const slot of currentSlots) {
 			const curr = slot.next_token?.[0]?.n_decoded ?? 0;
+			const now = Date.now();
 
 			if (slot.is_processing) {
 				const prev = prevDecoded.get(slot.id) ?? curr;
-				const speed = curr - prev;
+				const prevT = prevTime.get(slot.id) ?? now;
+				const elapsed = (now - prevT) / 1000;
+				const speed = elapsed > 0 ? (curr - prev) / elapsed : 0;
 				next[slot.id] = speed;
 				prevDecoded.set(slot.id, curr);
+				prevTime.set(slot.id, now);
 			} else {
 				next[slot.id] = 0;
 				prevDecoded.set(slot.id, 0);
+				prevTime.set(slot.id, 0);
 			}
 		}
 
