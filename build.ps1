@@ -22,36 +22,35 @@ $HEAD_SHORT = git rev-parse --short HEAD
 
 # Configure and build
 cmake -B build -DGGML_NATIVE=ON -DGGML_CUDA=ON -DGGML_CUDA_FA_ALL_QUANTS=ON -DLLAMA_BUILD_UI=OFF
-$proc = Start-Process -FilePath "cmake" -ArgumentList "--build build --config Release -j $([Environment]::ProcessorCount - 2) --target llama-server llama-cli llama-results llama-bench" -NoNewWindow -PassThru
-$proc.PriorityClass = [System.Diagnostics.ProcessPriorityClass]::Idle
-$proc.WaitForExit()
-if ($proc.ExitCode -ne 0) { exit $proc.ExitCode }
+cmake --build build --config Release -j $([Environment]::ProcessorCount - 2) --target llama-server llama-cli llama-results llama-bench
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 # Output directory
-$BRANCH_DIR = "$env:TEMP\llama.cpp\$BRANCH"
-$OUTPUT_DIR = "$BRANCH_DIR\$HEAD_SHORT"
+$BRANCH_DIR = Join-Path (Join-Path $env:TEMP "llama.cpp") $BRANCH
+$OUTPUT_DIR = Join-Path $BRANCH_DIR $HEAD_SHORT
 New-Item -ItemType Directory -Force -Path $OUTPUT_DIR | Out-Null
 
 # Copy binaries
 $BINARIES = @("llama-server.exe", "llama-cli.exe", "llama-results.exe", "llama-bench.exe")
+$BIN_DIR = Join-Path (Join-Path (Join-Path $PSScriptRoot "build") "bin") "Release"
 foreach ($bin in $BINARIES) {
-    $SRC = "build\bin\Release\$bin"
+    $SRC = Join-Path $BIN_DIR $bin
     if (-not (Test-Path $SRC)) { Write-Warning "Binary not found: $bin"; continue }
     Copy-Item $SRC $OUTPUT_DIR
 
-    # Symlink latest binaries to branch directory
+    # Hard link latest binaries to branch directory (no admin required)
     $LINK = Join-Path $BRANCH_DIR $bin
     if (Test-Path $LINK) { Remove-Item $LINK -Force }
-    New-Item -ItemType SymbolicLink -Path $LINK -Target (Join-Path $OUTPUT_DIR $bin) | Out-Null
+    New-Item -ItemType HardLink -Path $LINK -Target (Join-Path $OUTPUT_DIR $bin) | Out-Null
 }
 
 # Write version file
 $VERSION_FILE = Join-Path $OUTPUT_DIR "version.txt"
 @"
-HEAD $BRANCH: $HEAD_COMMIT
+HEAD ${BRANCH}: $HEAD_COMMIT
 Rebased on origin/master: $MASTER_COMMIT
 "@ | Set-Content -Path $VERSION_FILE -Encoding UTF8
 
 Write-Host "Built successfully -> $OUTPUT_DIR"
-Write-Host "HEAD $BRANCH: $HEAD_COMMIT"
+Write-Host "HEAD ${BRANCH}: $HEAD_COMMIT"
 Write-Host "Rebased on origin/master: $MASTER_COMMIT"
