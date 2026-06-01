@@ -1,3 +1,18 @@
+<!-- ============================== -->
+<!-- DOWNSTREAM CUSTOMIZATIONS      -->
+<!-- All agent/config mods go here  -->
+<!-- End of downstream section       -->
+<!-- ============================== -->
+
+## Git Workflow
+
+This is a customization of llama.cpp — not an upstream PR. Keep feature branches rebased on `origin/master` to maintain a clean linear history and easy tracking of custom changes.
+
+- **Use `git pull --rebase` or `git rebase origin/master`** to stay up to date — never merge
+- **`git diff origin/master`** to isolate your customizations at any time
+
+---
+
 # Instructions for llama.cpp
 
 > [!IMPORTANT]
