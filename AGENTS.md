@@ -11,6 +11,13 @@ This is a customization of llama.cpp — not an upstream PR. Keep feature branch
 - **Use `git pull --rebase` or `git rebase origin/master`** to stay up to date — never merge
 - **`git diff origin/master`** to isolate your customizations at any time
 
+## WSL / Windows Environment
+
+The agent runs in WSL but the project repository lives on the Windows host. Run git and build commands through `powershell.exe` (not native WSL tools) to avoid filesystem and line-ending issues.
+
+- **Git**: `powershell.exe -Command "cd 'WORKSPACE'; git <command>"`
+- **Build**: `powershell.exe -Command "cd 'BUILD_DIR'; cmake --build . --parallel"`
+
 ---
 
 # Instructions for llama.cpp
