@@ -16,7 +16,7 @@ This is a customization of llama.cpp — not an upstream PR. Keep feature branch
 The agent runs in WSL but the project repository lives on the Windows host. Run git and build commands through `powershell.exe` (not native WSL tools) to avoid filesystem and line-ending issues.
 
 - **Git**: `powershell.exe -Command "cd 'WORKSPACE'; git <command>"`
-- **Build**: `powershell.exe -Command "cd 'BUILD_DIR'; cmake --build . --parallel"`
+- **Build**: `powershell.exe -Command "cd 'REPO'; ./build.ps1"` — outputs binaries to `%TEMP%\llama.cpp\master\commit\<hash>\` with a `version.txt` (master commit + HEAD)
 
 ---
 
