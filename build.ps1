@@ -35,12 +35,14 @@ New-Item -ItemType Directory -Force -Path $OUTPUT_DIR | Out-Null
 # Copy binaries
 $BINARIES = @("llama-server.exe", "llama-cli.exe", "llama-results.exe", "llama-bench.exe")
 foreach ($bin in $BINARIES) {
-    Copy-Item "build\bin\Release\$bin" $OUTPUT_DIR
+    $SRC = "build\bin\Release\$bin"
+    if (-not (Test-Path $SRC)) { Write-Warning "Binary not found: $bin"; continue }
+    Copy-Item $SRC $OUTPUT_DIR
 
     # Symlink latest binaries to branch directory
     $LINK = Join-Path $BRANCH_DIR $bin
     if (Test-Path $LINK) { Remove-Item $LINK -Force }
-    New-Item -ItemType Junction -Path $LINK -Target (Join-Path $OUTPUT_DIR $bin) | Out-Null
+    New-Item -ItemType SymbolicLink -Path $LINK -Target (Join-Path $OUTPUT_DIR $bin) | Out-Null
 }
 
 # Write version file
