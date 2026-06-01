@@ -22,7 +22,7 @@ $HEAD_SHORT = git rev-parse --short HEAD
 
 # Configure and build
 cmake -B build -DGGML_NATIVE=ON -DGGML_CUDA=ON -DGGML_CUDA_FA_ALL_QUANTS=ON -DLLAMA_BUILD_UI=OFF
-cmake --build build --config Release -j $([Environment]::ProcessorCount - 2) --target llama-server llama-cli llama-results llama-bench
+cmake --build build --config Release -j $([Math]::Max(1, [Environment]::ProcessorCount - 2)) --target llama-server llama-cli llama-results llama-bench
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 # Output directory

@@ -16,8 +16,8 @@ git fetch origin master
 $OLD_MASTER = git rev-parse origin/master
 
 Write-Host "Rebasing $BRANCH on origin/master..."
-$proc = Start-Process -FilePath "git" -ArgumentList "rebase origin/master" -NoNewWindow -Wait -PassThru
-if ($proc.ExitCode -ne 0) {
+git rebase origin/master
+if ($LASTEXITCODE -ne 0) {
     Write-Host "Rebase failed! Run 'git rebase --abort' to undo." -ForegroundColor Red
     exit 1
 }
