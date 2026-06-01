@@ -16,8 +16,8 @@ git fetch origin master
 $OLD_MASTER = git rev-parse origin/master
 
 Write-Host "Rebasing $BRANCH on origin/master..."
-$result = git rebase origin/master 2>&1
-if ($LASTEXITCODE -ne 0) {
+$proc = Start-Process -FilePath "git" -ArgumentList "rebase origin/master" -NoNewWindow -Wait -PassThru
+if ($proc.ExitCode -ne 0) {
     Write-Host "Rebase failed! Run 'git rebase --abort' to undo." -ForegroundColor Red
     exit 1
 }
@@ -30,9 +30,7 @@ $NEW_MASTER = git rev-parse origin/master
 # Log to history file
 $HISTORY_FILE = Join-Path $PSScriptRoot "rebase-history.txt"
 $TIMESTAMP = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
-$ENTRY = @"
-$TIMESTAMP | $BRANCH | $OLD_SHORT -> $NEW_SHORT | master: $OLD_MASTER
-"@
+$ENTRY = "$TIMESTAMP | $BRANCH | $OLD_SHORT -> $NEW_SHORT | master: $OLD_MASTER"
 Add-Content -Path $HISTORY_FILE -Value $ENTRY -Encoding UTF8
 
 Write-Host "Rebase complete."
