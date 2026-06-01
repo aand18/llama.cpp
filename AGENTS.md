@@ -8,7 +8,7 @@
 
 This is a customization of llama.cpp — not an upstream PR. Keep feature branches rebased on `origin/master` to maintain a clean linear history and easy tracking of custom changes.
 
-- **Use `git pull --rebase` or `git rebase origin/master`** to stay up to date — never merge
+- **Use `./rebase.ps1`** to rebase current branch on `origin/master` — logs to `rebase-history.txt`
 - **`git diff origin/master`** to isolate your customizations at any time
 
 ## WSL / Windows Environment
@@ -16,7 +16,10 @@ This is a customization of llama.cpp — not an upstream PR. Keep feature branch
 The agent runs in WSL but the project repository lives on the Windows host. Run git and build commands through `powershell.exe` (not native WSL tools) to avoid filesystem and line-ending issues.
 
 - **Git**: `powershell.exe -Command "cd 'WORKSPACE'; git <command>"`
-- **Build**: `powershell.exe -Command "cd 'REPO'; ./build.ps1"` — outputs binaries to `%TEMP%\llama.cpp\master\commit\<hash>\` with a `version.txt` (master commit + HEAD)
+- **Rebase**: `powershell.exe -Command "cd 'REPO'; ./rebase.ps1"` — rebases on `origin/master`, logs to `rebase-history.txt`
+- **Build**: `powershell.exe -Command "cd 'REPO'; ./build.ps1"` — outputs to `%TEMP%\llama.cpp\<branch>\<short_hash>\` with `version.txt`
+- **Latest binaries**: Symlinked to `%TEMP%\llama.cpp\<branch>\*.exe` (e.g. `llama-server.exe`)
+- **CUDA override**: `$env:CUDA_PATH = $env:CUDA_PATH_V13_3; ./build.ps1`
 
 ---
 
