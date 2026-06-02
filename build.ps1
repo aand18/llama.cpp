@@ -25,23 +25,22 @@ cmake -B build -DGGML_NATIVE=ON -DGGML_CUDA=ON -DGGML_CUDA_FA_ALL_QUANTS=ON -DLL
 cmake --build build --config Release -j $([Math]::Max(1, [Environment]::ProcessorCount - 2)) --target llama-server llama-cli llama-results llama-bench
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-# Output directory
-$BRANCH_DIR = Join-Path (Join-Path $env:TEMP "llama.cpp") $BRANCH
+# Output directory — replace / in branch name to avoid nested dirs
+$BRANCH_OUTPUT = $BRANCH -replace '/', '-'
+$BRANCH_DIR = Join-Path (Join-Path $env:TEMP "llama.cpp") $BRANCH_OUTPUT
 $OUTPUT_DIR = Join-Path $BRANCH_DIR $HEAD_SHORT
 New-Item -ItemType Directory -Force -Path $OUTPUT_DIR | Out-Null
 
-# Copy binaries
-$BINARIES = @("llama-server.exe", "llama-cli.exe", "llama-results.exe", "llama-bench.exe")
+# Copy all build artifacts (exes + dlls)
 $BIN_DIR = Join-Path (Join-Path (Join-Path $PSScriptRoot "build") "bin") "Release"
-foreach ($bin in $BINARIES) {
-    $SRC = Join-Path $BIN_DIR $bin
-    if (-not (Test-Path $SRC)) { Write-Warning "Binary not found: $bin"; continue }
-    Copy-Item $SRC $OUTPUT_DIR
+Copy-Item (Join-Path $BIN_DIR "*") $OUTPUT_DIR -Force
 
-    # Hard link latest binaries to branch directory (no admin required)
-    $LINK = Join-Path $BRANCH_DIR $bin
+# Hard link latest EXEs to branch directory (no admin required)
+$EXES = Get-ChildItem $OUTPUT_DIR -Filter "*.exe" | Select-Object -ExpandProperty Name
+foreach ($exe in $EXES) {
+    $LINK = Join-Path $BRANCH_DIR $exe
     if (Test-Path $LINK) { Remove-Item $LINK -Force }
-    New-Item -ItemType HardLink -Path $LINK -Target (Join-Path $OUTPUT_DIR $bin) | Out-Null
+    New-Item -ItemType HardLink -Path $LINK -Target (Join-Path $OUTPUT_DIR $exe) | Out-Null
 }
 
 # Write version file
