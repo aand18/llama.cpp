@@ -17,8 +17,9 @@ The agent runs in WSL but the project repository lives on the Windows host. Run 
 
 - **Git**: `powershell.exe -Command "cd 'WORKSPACE'; git <command>"`
 - **Rebase**: `powershell.exe -Command "cd 'REPO'; ./rebase.ps1"` — rebases on `origin/master`, logs to `rebase-history.txt`
-- **Build**: `powershell.exe -Command "cd 'REPO'; ./build.ps1"` — outputs to `%TEMP%\llama.cpp\<branch>\<short_hash>\` with `version.txt`
-- **Latest binaries**: Hard-linked to `%TEMP%\llama.cpp\<branch>\*.exe` (e.g. `llama-server.exe`)
+- **Build**: `powershell.exe -Command "cd 'REPO'; ./build.ps1"` — outputs to `%TEMP%\llama.cpp\<normalized-branch>\<short_hash>\` with all DLLs/EXEs + `version.txt`
+- **Latest EXEs**: Hard-linked to `%TEMP%\llama.cpp\<normalized-branch>\*.exe` (e.g. `llama-server.exe`)
+- **Branch normalization**: `feat/webui-slot-inspector` → `feat-webui-slot-inspector` (slashes replaced with dashes)
 - **CUDA override**: `$env:CUDA_PATH = $env:CUDA_PATH_V13_3; ./build.ps1`
 
 ---
