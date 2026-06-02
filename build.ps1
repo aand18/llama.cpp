@@ -35,12 +35,16 @@ New-Item -ItemType Directory -Force -Path $OUTPUT_DIR | Out-Null
 $BIN_DIR = Join-Path (Join-Path (Join-Path $PSScriptRoot "build") "bin") "Release"
 Copy-Item (Join-Path $BIN_DIR "*") $OUTPUT_DIR -Force
 
-# Hard link latest EXEs to branch directory (no admin required)
+# Create batch wrappers in branch directory pointing to latest commit's EXEs
 $EXES = Get-ChildItem $OUTPUT_DIR -Filter "*.exe" | Select-Object -ExpandProperty Name
 foreach ($exe in $EXES) {
-    $LINK = Join-Path $BRANCH_DIR $exe
-    if (Test-Path $LINK) { Remove-Item $LINK -Force }
-    New-Item -ItemType HardLink -Path $LINK -Target (Join-Path $OUTPUT_DIR $exe) | Out-Null
+    $batName = $exe -replace '\.exe$', '.bat'
+    $batPath = Join-Path $BRANCH_DIR $batName
+    $exePath = Join-Path $OUTPUT_DIR $exe
+    $content = "@echo off`r`n"
+    $content += "cd /d ""$OUTPUT_DIR""`r`n"
+    $content += """$exePath"" %*"
+    Set-Content -Path $batPath -Value $content -Encoding ASCII
 }
 
 # Write version file
