@@ -1,0 +1,14 @@
+0.00.024.364 I common_params_print_info: model n_ctx = 161792
+0.00.024.366 I llama_model_loader: - n_layer: 48
+0.00.024.368 I llama_model_loader: - n_embd_k_gqa: 128
+0.00.024.369 I llama_model_loader: - n_embd_v_gqa: 128
+0.00.024.370 I llama_model_loader: - n_embd_head_k: 128
+0.00.024.371 I llama_model_loader: - n_embd_head_v: 128
+0.00.025.000 I llama_kv_cache: size = 8736.00 MiB ( 161792 cells,  48 layers,  1/1 seqs), K (q4_1): 4368.00 MiB, V (q4_0): 4368.00 MiB
+0.00.025.500 I llama_kv_cache: size =  957.50 MiB (  98048 cells,   1 layers,  1/1 seqs), K (q4_1):  478.75 MiB, V (q4_0):  478.75 MiB
+0.00.026.000 I CUDA0 compute buffer size = 800.0 MiB
+0.00.027.000 I common_sampling_print_options: speculative draft model loaded
+0.00.030.000 I common_params_fit_impl: projected to use 22250.0 MiB of device memory vs. 2048 MiB of free device memory
+0.00.030.001 I fitter: target free memory = 2048 MiB, ctx_size = 161792
+0.00.031.000 I common_memory_breakdown_print: | memory breakdown [MiB] | total    free     self   model   context   compute    unaccounted |
+0.00.031.001 I common_memory_breakdown_print: |   - CUDA0 (RTX 4090)   | 24563 = 22286 + (23294 = 16500 +    8736 +     800) +      -21016 |
