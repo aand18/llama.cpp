@@ -4,8 +4,8 @@ Subdir-scoped rules for agents working inside `tools/dev/`.
 
 ## Scripts in this directory
 
-- `Update-Integrated.ps1` — run to refresh `local/integrated` with the latest upstream + your personal branches.
-- `Prune-Worktrees.ps1` — run to list or clean up stale `opencode/*` worktree branches left over from prior sessions.
+- `Update-Integrated.ps1` — run to refresh `local/integrated` with the latest upstream + your personal branches. Includes a preflight check that refuses to run if `master` has diverged from `upstream/master`.
+- `Prune-Worktrees.ps1` — run to archive stale `opencode/*` worktree branches. Never just deletes: renames to `archive/<name>`, pushes to origin, then removes the local ref. Use `-Interactive` or `-Force` to act.
 
 ## Read the script header first
 

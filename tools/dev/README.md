@@ -41,7 +41,8 @@ If any step fails, the script halts with a clear error and rolls back the rename
 
 1. Add the `upstream` remote pointing at `https://github.com/ggml-org/llama.cpp.git`, and `origin` at your fork `https://github.com/aand18/llama.cpp`.
 2. Create the build branch: `git checkout -b local/integrated master`.
-3. Push it to `origin` with branch protection enabled, so the script's `--force-with-lease` is the only path that ever updates it.
+3. Push it to `origin` with branch protection enabled (linear history, no force-push, no delete, 1 PR approval). The script's `--force-with-lease` is the only path that ever updates it.
+4. If `master` has local commits upstream doesn't, reset it: `git checkout master && git reset --hard upstream/master`. Local-only gitignore entries (like `.worktrees/`) belong in `.git/info/exclude`, not in committed `.gitignore`.
 
 ## See also
 

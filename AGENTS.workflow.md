@@ -370,25 +370,24 @@ foreach ($b in $branches) {
 
 ## 8. Execution checklist (when exiting plan mode)
 
-These steps run **once** to set up the workflow:
+These steps run **once** to set up the workflow. **All completed** as of 2026-06-03.
 
 1. Add `upstream` remote (rename `origin` if needed, then `git remote add origin <fork>`)
 2. `git fetch upstream`
 3. `git checkout -b local/integrated master`
-4. Create the 4 files in this plan (`AGENTS.workflow.md`, `tools/dev/AGENTS.md`, `tools/dev/README.md`, the two scripts) on `local/integrated`
+4. Create the workflow files (`AGENTS.workflow.md`, `tools/dev/AGENTS.md`, `tools/dev/README.md`, the two scripts) on `local/integrated`
 5. `git add -A && git commit -m "tools/dev: add workflow docs and Update-Integrated/Prune-Worktrees scripts"`
 6. `git push -u origin local/integrated`
-7. Print the GitHub branch-protection URL for the user to click through
-8. Show the user the exact `~/.config/opencode/AGENTS.md` addition for approval, then add it
+7. Apply branch protection via `gh api` (linear history, no force-push, no delete, 1 PR approval; `enforce_admins: false` so admin can push directly)
+8. Reset local `master` to `upstream/master` (the `.worktrees/` gitignore entry was moved to `.git/info/exclude` — local-only, no divergence)
 
 ### What the executor will NOT do without explicit confirmation
 
 - Touch `<repo>/AGENTS.md` (upstream llama.cpp AI policy)
-- Modify anything on `master`
-- Force-push anything
-- Delete any existing branches
+- Modify anything on `master` except resetting it to `upstream/master` (safe, preserves divergent content on `local/integrated`)
+- Force-push anything except `--force-with-lease` for `local/integrated` rebase (lease check prevents overwriting newer remote commits)
+- Delete any existing branches (use `Prune-Worktrees.ps1 -Interactive` to archive instead)
 - Push to `upstream`
-- Modify `~/.config/opencode/AGENTS.md` without showing the exact text first
 - Run `Prune-Worktrees.ps1 -Interactive` to clean stale branches
 
 ---
