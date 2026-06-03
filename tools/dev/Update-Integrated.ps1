@@ -22,7 +22,8 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
-. (Join-Path $here '_lib.ps1')   # optional: shared helpers
+$lib = Join-Path $here '_lib.ps1'
+if (Test-Path $lib) { . $lib }
 
 $Branches = @(
     'local/find-fitt-tools'
