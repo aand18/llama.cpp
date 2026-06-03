@@ -144,3 +144,4 @@ To conserve context space, load these resources as needed:
 - [Jinja engine](common/jinja/README.md)
 - [How to add a new model](docs/development/HOWTO-add-model.md)
 - [PR template](.github/pull_request_template.md)
+- [WSL WebUI build workflow](README.md#building-the-webui-in-wsl) — use when user asks to build the Web UI frontend

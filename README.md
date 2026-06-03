@@ -55,6 +55,18 @@ llama-cli -hf ggml-org/gemma-3-1b-it-GGUF
 llama-server -hf ggml-org/gemma-3-1b-it-GGUF
 ```
 
+## Building the WebUI in WSL
+
+The WebUI (`tools/ui/`) is a SvelteKit app that builds static files to `tools/ui/dist/` (embedded into `llama-server` by CMake).
+
+Building on WSL's native ext4 filesystem is **much faster** than building on `/mnt/c/` due to npm's heavy I/O. Use the helper script:
+
+```bash
+bash scripts/build-webui-wsl.sh
+```
+
+That syncs the source to `~/llama.cpp-mtp`, runs `npm install && npm run build`, and copies `tools/ui/dist/` back to your Windows project.
+
 ## Description
 
 The main goal of `llama.cpp` is to enable LLM inference with minimal setup and state-of-the-art performance on a wide
