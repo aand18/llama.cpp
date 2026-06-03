@@ -22,6 +22,16 @@ The agent runs in WSL but the project repository lives on the Windows host. Run 
 - **Branch normalization**: `feat/webui-slot-inspector` → `feat-webui-slot-inspector` (slashes replaced with dashes)
 - **CUDA override**: `$env:CUDA_PATH = $env:CUDA_PATH_V13_3; ./build.ps1`
 
+## UI Build
+
+The build script disables the embedded UI (`-DLLAMA_BUILD_UI=OFF -DLLAMA_USE_PREBUILT_UI=OFF`). To build the UI separately:
+
+```bash
+cd tools/ui && npm install && npm run build
+```
+
+Output goes to `tools/ui/dist/`. The CMake provisioning script picks it up automatically — no manual copy needed.
+
 ---
 
 # Instructions for llama.cpp

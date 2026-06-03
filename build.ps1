@@ -9,19 +9,30 @@ $ErrorActionPreference = "Stop"
 Set-Location $PSScriptRoot
 
 # Fix git for worktree: .git file has WSL path Windows git can't resolve
-# Main repo is two levels up: .worktrees/branch-name -> main repo root
-$MAIN_REPO = (Get-Item $PSScriptRoot).Parent.Parent.FullName
-$env:GIT_DIR = Join-Path (Join-Path $MAIN_REPO ".git\worktrees") (Split-Path $PSScriptRoot -Leaf)
+if (Test-Path (Join-Path $PSScriptRoot ".git") -PathType Leaf) {
+    # Worktree: parse gitdir from .git file
+    $gitdir = (Get-Content (Join-Path $PSScriptRoot ".git")) -match '^gitdir:'
+    $gitdir = $gitdir -replace '^gitdir:\s*', ''
+    # Convert WSL path (/mnt/c/...) to Windows path (C:/...)
+    if ($gitdir -match '^/mnt/([a-z])/(.*)') {
+        $gitdir = $matches[1].toupper() + ":/" + $matches[2] -replace '/', '\'
+    }
+    $env:GIT_DIR = $gitdir
+}
+# Regular repo: no GIT_DIR override needed
 
 # Get branch and commit info
-$BRANCH = git rev-parse --abbrev-ref HEAD
-git fetch origin master
-$MASTER_COMMIT = git rev-parse origin/master
-$HEAD_COMMIT = git rev-parse HEAD
-$HEAD_SHORT = git rev-parse --short HEAD
+$BRANCH = (git rev-parse --abbrev-ref HEAD 2>$null | Out-String).Trim()
+$oldErrorAction = $ErrorActionPreference
+$ErrorActionPreference = "Continue"
+git fetch origin master 2>&1 | Out-Null
+$ErrorActionPreference = $oldErrorAction
+$MASTER_COMMIT = (git rev-parse origin/master 2>$null | Out-String).Trim()
+$HEAD_COMMIT = (git rev-parse HEAD 2>$null | Out-String).Trim()
+$HEAD_SHORT = (git rev-parse --short HEAD 2>$null | Out-String).Trim()
 
 # Configure and build
-cmake -B build -DGGML_NATIVE=ON -DGGML_CUDA=ON -DGGML_CUDA_FA_ALL_QUANTS=ON -DLLAMA_BUILD_UI=OFF
+cmake -B build -DGGML_NATIVE=ON -DGGML_CUDA=ON -DGGML_CUDA_FA_ALL_QUANTS=ON -DLLAMA_BUILD_UI=OFF -DLLAMA_USE_PREBUILT_UI=OFF
 cmake --build build --config Release -j $([Math]::Max(1, [Environment]::ProcessorCount - 2)) --target llama-server llama-cli llama-results llama-bench
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
