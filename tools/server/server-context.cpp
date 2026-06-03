@@ -535,6 +535,8 @@ struct server_slot {
                 }
             };
 
+            res["timings"] = get_timings().to_json();
+
             if (!only_metrics) {
                 res["prompt"] = ptask->tokens.detokenize(ctx_tgt, true);
                 res["generated"] = generated_text.empty() ? debug_generated_text : generated_text;
