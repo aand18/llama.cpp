@@ -12,12 +12,23 @@ Run it when upstream has new commits, when you finish work on a `local/*` or `to
 
 The branches it merges in are controlled by the `$Branches` array at the top of the script. Edit that array to add or remove `local/*` / `topic/*` names.
 
+The script includes a preflight check: if `master` has diverged from `upstream/master` (you have local commits upstream doesn't, AND upstream has commits you don't), it refuses to run with a clear error and a recovery recipe. This protects you from silently rewriting master.
+
 ### Prune-Worktrees.ps1
 
-Lists or cleans stale `opencode/*` worktree branches left over from agent sessions.
+Archives stale `opencode/*` worktree branches left over from agent sessions. **Never just deletes** — every branch goes through a safe pipeline:
 
-- `-DryRun` prints what would be processed and exits.
-- `-Interactive` prompts for each branch: keep, delete, or skip.
+1. Find its worktree (if any)
+2. `git worktree remove --force` on the worktree
+3. Rename the local branch to `archive/<original-name>`
+4. Push `archive/<original-name>` to `origin`
+5. Delete the local archive ref (data is preserved on `origin`)
+
+If any step fails, the script halts with a clear error and rolls back the rename. To re-use an archived branch later: `git fetch origin && git checkout -b <new-name> origin/archive/opencode/<name>`.
+
+- `-DryRun` prints what would be archived and exits.
+- `-Interactive` prompts for each branch: keep, archive, or skip.
+- `-Force` archives every branch without prompting (use carefully).
 
 ## Typical day
 
