@@ -170,7 +170,8 @@ protects you from accidental master rewrites when upstream has new commits.
 
 ```powershell
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
-. (Join-Path $here '_lib.ps1')   # optional: shared helpers
+$lib = Join-Path $here '_lib.ps1'
+if (Test-Path $lib) { . $lib }
 
 $Branches = @(
     'local/find-fitt-tools'
@@ -220,7 +221,8 @@ git rebase master
 if ($LASTEXITCODE -ne 0) { throw "rebase local/integrated on master failed; resolve, then run this script again" }
 
 foreach ($b in $Branches) {
-    if (git show-ref --verify --quiet "refs/heads/$b") {
+    git show-ref --verify --quiet "refs/heads/$b"
+    if ($LASTEXITCODE -eq 0) {
         Write-Host "Merging $b into local/integrated" -ForegroundColor Cyan
         git merge --no-ff $b
         if ($LASTEXITCODE -ne 0) {
