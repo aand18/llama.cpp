@@ -272,9 +272,6 @@ set(LLAMA_TEST_NAME test-mtmd-c-api)
 llama_build_and_test(test-mtmd-c-api.c)
 target_link_libraries(${LLAMA_TEST_NAME} PRIVATE mtmd)
 unset(LLAMA_TEST_NAME)
-
-# bit-identical regression test for encoder pair-chunking
-# requires model + mmproj files passed as CLI args, not auto-run via ctest
 add_executable(test-mtmd-encoder-seq test-mtmd-encoder-seq.cpp)
 target_link_libraries(test-mtmd-encoder-seq PRIVATE mtmd llama)
 target_compile_features(test-mtmd-encoder-seq PRIVATE cxx_std_17)
