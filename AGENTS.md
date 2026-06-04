@@ -32,6 +32,33 @@ cd tools/ui && npm install && npm run build
 
 Output goes to `tools/ui/dist/`. The CMake provisioning script picks it up automatically — no manual copy needed.
 
+## mtmd Video Support
+
+Port of [upstream PR #21858](https://github.com/ggml-org/llama.cpp/pull/21858) (mtmd seq-of-images) plus an ffmpeg-backed `--video` flag in `llama-mtmd-cli`. See [`docs/mtmd-video.md`](docs/mtmd-video.md) for design rationale, port vs. fix breakdown, and PR-review prep.
+
+**Files touched** (16): `tools/mtmd/{clip.cpp,clip.h,clip-graph.h,clip-impl.h,mtmd.cpp,mtmd.h,mtmd-cli.cpp,mtmd-helper.cpp,mtmd-helper.h,models/{models.h,qwen2vl.cpp,qwen3vl.cpp}}`, `common/{arg.cpp,common.h}`, `tests/{test-arg-parser.cpp,test-mtmd-c-api.c}`.
+
+**Build** (CUDA required for 27B; CPU is ~340× slower):
+```powershell
+./build-cuda.ps1   # explicit CUDA v13.1 root — MSVC has no 13.3 targets
+```
+
+**Test (Qwen3.5-2B Q4_K_M, CPU/GPU, fast sanity):**
+```powershell
+printf '/image C:\path\to\test.jpg\nDescribe it.\n/quit\n' | `
+  ./build/bin/Release/llama-mtmd-cli.exe `
+    -m "...Qwen3.5-2B-Q4_K_M.gguf" --mmproj "...mmproj-F32.gguf" `
+    -ngl 99 -c 4096 -b 1024 -ub 512
+printf '/video C:\path\to\test.mp4\nDescribe it.\n/quit\n' | `
+  <same binary> --video-fps 1.0 --video-max-frames 2
+```
+
+**Test (Qwen3.6-27B IQ4_XS, GPU):** swap in `Qwen3.6-27B-IQ4_XS.gguf` + `mmproj-F16.gguf`; needs ~16 GB VRAM.
+
+**Known limit:** `qwen2vl.cpp:25` rejects `nt>2`. Use `--video-max-frames 2`. See design doc for follow-up plan.
+
+**Tools needed on Windows PATH:** `ffmpeg`, `ffprobe` (chocolatey at `C:\ProgramData\chocolatey\bin\`).
+
 ---
 
 # Instructions for llama.cpp
