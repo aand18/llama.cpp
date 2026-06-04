@@ -1,4 +1,6 @@
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #include <assert.h>
 
 #include "mtmd.h"
@@ -67,6 +69,50 @@ int main(void) {
         return 1;
     }
     printf("Sequence bitmap API check: OK\n");
+
+    // Test odd-nt round-up: a 3-frame input must produce a 4-frame bitmap
+    // with the 4th frame being a duplicate of the 3rd. This pins down the
+    // rounding behaviour and would catch a regression that reads past the
+    // input buffer to fill the duplicate.
+    {
+        const uint32_t nx = 16, ny = 16;
+        const uint32_t nt_in = 3;
+        const size_t frame_size = (size_t) nx * ny * 3;
+        const size_t data_size = nt_in * frame_size;
+        unsigned char * data = malloc(data_size);
+        if (!data) {
+            fprintf(stderr, "malloc failed\n");
+            return 1;
+        }
+        for (size_t i = 0; i < data_size; i++) {
+            data[i] = (unsigned char) (i & 0xFF);
+        }
+        mtmd_bitmap * bitmap = mtmd_bitmap_init_from_seq(nx, ny, nt_in, data);
+        free(data);
+        if (!bitmap) {
+            fprintf(stderr, "mtmd_bitmap_init_from_seq returned null for nt=%u\n", nt_in);
+            return 1;
+        }
+        uint32_t nt_out = mtmd_bitmap_get_nt(bitmap);
+        if (nt_out != nt_in + 1) {
+            fprintf(stderr, "expected nt=%u (rounded up), got nt=%u\n", nt_in + 1, nt_out);
+            mtmd_bitmap_free(bitmap);
+            return 1;
+        }
+        const unsigned char * bdata = mtmd_bitmap_get_data(bitmap);
+        if (!bdata) {
+            fprintf(stderr, "mtmd_bitmap_get_data returned null\n");
+            mtmd_bitmap_free(bitmap);
+            return 1;
+        }
+        if (memcmp(bdata + 2 * frame_size, bdata + 3 * frame_size, frame_size) != 0) {
+            fprintf(stderr, "frame 3 should be a duplicate of frame 2\n");
+            mtmd_bitmap_free(bitmap);
+            return 1;
+        }
+        mtmd_bitmap_free(bitmap);
+        printf("Bitmap init from seq (odd nt) test: OK (nt_in=%u -> nt_out=%u, frame 3 == frame 2)\n", nt_in, nt_out);
+    }
 
     // Smoke test: video extraction via ffmpeg subprocess.
     // Generate a small synthetic test video, then verify the extraction

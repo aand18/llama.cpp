@@ -129,6 +129,3 @@ struct clip_cap {
 };
 struct clip_cap clip_get_cap(const char * fname);
 bool clip_has_whisper_encoder(const struct clip_ctx * ctx);
-
-// true if model graph support image->nt (temporal dimension) as input
-bool clip_model_supports_seq_input(const struct clip_ctx * ctx);

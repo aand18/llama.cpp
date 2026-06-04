@@ -1038,6 +1038,10 @@ struct mtmd_tokenizer {
         LOG_DBG("seq_image: nt=%u, nx=%u, ny=%u, n_tokens=%u\n",
                 bitmap->nt, image_tokens->nx, image_tokens->ny, image_tokens->n_tokens());
 
+        if (!ctx->img_beg.empty()) {
+            add_text(ctx->img_beg, true);
+        }
+
         mtmd_input_chunk chunk{
             MTMD_INPUT_CHUNK_TYPE_IMAGE,
             {}, // text tokens
@@ -1273,22 +1277,25 @@ mtmd_bitmap * mtmd_bitmap_init_from_seq(uint32_t nx,
     // TODO [QWEN_VIDEO]: we only support Qwen-VL style for now, which requires even number of frames
     // therefore, we duplicate the last frame if nt is odd, to avoid issues in video preprocessing
     bool is_odd = (nt % 2 == 1);
-    if (is_odd) {
-        nt += 1;
-    }
+    uint32_t nt_out = is_odd ? nt + 1 : nt;
     size_t frame_size = (size_t)nx * ny * 3;
     mtmd_bitmap * bitmap = new mtmd_bitmap;
     bitmap->nx = nx;
     bitmap->ny = ny;
-    bitmap->nt = nt;
-    size_t data_size = frame_size * nt;
+    bitmap->nt = nt_out;
+    size_t data_size = frame_size * nt_out;
     bitmap->data.resize(data_size);
-    std::memcpy(bitmap->data.data(), data, data_size);
     if (is_odd) {
-        // duplicate the last frame
-        std::memcpy(bitmap->data.data() + (nt - 1) * frame_size,
-                    data + (nt - 2) * frame_size,
+        // Copy all nt original frames, then duplicate the last one at
+        // position nt (which is nt_out - 1). The first memcpy reads nt
+        // frames in-bounds; the second reads 1 frame in-bounds. Avoids
+        // the one-past-end read of the previous implementation.
+        std::memcpy(bitmap->data.data(), data, frame_size * nt);
+        std::memcpy(bitmap->data.data() + nt * frame_size,
+                    data + (nt - 1) * frame_size,
                     frame_size);
+    } else {
+        std::memcpy(bitmap->data.data(), data, data_size);
     }
     return bitmap;
 }
