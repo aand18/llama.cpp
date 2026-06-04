@@ -116,6 +116,10 @@ void clip_image_f32_batch_add_mel(struct clip_image_f32_batch * batch, int n_mel
 
 bool clip_has_vision_encoder(const struct clip_ctx * ctx);
 bool clip_has_audio_encoder(const struct clip_ctx * ctx);
+bool clip_has_whisper_encoder(const struct clip_ctx * ctx);
+
+// true if model graph support image->nt (temporal dimension) as input
+bool clip_model_supports_seq_input(const struct clip_ctx * ctx);
 
 std::map<ggml_backend_dev_t, size_t> clip_get_mem_usage(const struct clip_ctx * ctx);
 
@@ -124,3 +128,7 @@ struct clip_cap {
     bool has_audio;
 };
 struct clip_cap clip_get_cap(const char * fname);
+bool clip_has_whisper_encoder(const struct clip_ctx * ctx);
+
+// true if model graph support image->nt (temporal dimension) as input
+bool clip_model_supports_seq_input(const struct clip_ctx * ctx);

@@ -31,6 +31,15 @@ MTMD_API void mtmd_helper_log_set(ggml_log_callback log_callback, void * user_da
 // this function is thread-safe
 MTMD_API mtmd_bitmap * mtmd_helper_bitmap_init_from_file(mtmd_context * ctx, const char * fname);
 
+// helper function to construct a mtmd_bitmap from a video file
+// frames are extracted using ffmpeg subprocess (must be on PATH)
+// fps: target sampling rate (e.g., 2.0 = extract 2 frames per second)
+// max_frames: cap on extracted frames (e.g., 64); 0 = no cap
+// frames are paired sequentially; if odd count, last frame is duplicated
+// returns nullptr on failure
+// this function is thread-safe
+MTMD_API mtmd_bitmap * mtmd_helper_bitmap_init_from_video(mtmd_context * ctx, const char * fname, float fps, int max_frames);
+
 // helper function to construct a mtmd_bitmap from a buffer containing a file
 // supported formats:
 //     image: formats supported by stb_image: jpg, png, bmp, gif, etc.

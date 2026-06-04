@@ -13,6 +13,7 @@
 
 #include <algorithm>
 #include <cinttypes>
+#include <string>
 #include <vector>
 
 //#define MTMD_AUDIO_DEBUG
@@ -534,4 +535,130 @@ mtmd_bitmap * mtmd_helper_bitmap_init_from_file(mtmd_context * ctx, const char *
     }
 
     return mtmd_helper_bitmap_init_from_buf(ctx, buf.data(), buf.size());
+}
+
+//
+// video extraction helpers (ffmpeg/ffprobe subprocess)
+//
+
+static int run_command_capture(const char * cmd, std::string & out) {
+    out.clear();
+#if defined(_WIN32)
+    FILE * pipe = _popen(cmd, "r");
+#else
+    FILE * pipe = popen(cmd, "r");
+#endif
+    if (!pipe) {
+        return -1;
+    }
+    char chunk[4096];
+    size_t n;
+    while ((n = fread(chunk, 1, sizeof(chunk), pipe)) > 0) {
+        out.append(chunk, n);
+    }
+#if defined(_WIN32)
+    int rc = _pclose(pipe);
+#else
+    int rc = pclose(pipe);
+#endif
+    if (rc != 0) {
+        return rc;
+    }
+    return 0;
+}
+
+static int video_probe_dimensions(const char * fname, uint32_t & nx, uint32_t & ny) {
+    std::string cmd = std::string("ffprobe -v error -select_streams v:0 -show_entries stream=width,height -of csv=s=x:p=0 \"") + fname + "\"";
+    std::string out;
+    if (run_command_capture(cmd.c_str(), out) != 0 || out.empty()) {
+        LOG_ERR("%s: ffprobe failed for %s\n", __func__, fname);
+        return -1;
+    }
+    int w = 0, h = 0;
+    if (sscanf(out.c_str(), "%dx%d", &w, &h) != 2 || w <= 0 || h <= 0) {
+        LOG_ERR("%s: failed to parse ffprobe output: '%s'\n", __func__, out.c_str());
+        return -1;
+    }
+    nx = (uint32_t) w;
+    ny = (uint32_t) h;
+    return 0;
+}
+
+static int video_extract_frames(const char * fname, float fps, int max_frames,
+                                 uint32_t & nx, uint32_t & ny, uint32_t & nt,
+                                 std::vector<unsigned char> & data) {
+    if (video_probe_dimensions(fname, nx, ny) != 0) {
+        return -1;
+    }
+
+    std::string cmd = std::string("ffmpeg -hide_banner -loglevel error -i \"") + fname + "\" -vf \"fps=" + std::to_string(fps) + ",format=rgb24\" -f rawvideo";
+    if (max_frames > 0) {
+        cmd += " -frames:v " + std::to_string(max_frames);
+    }
+    cmd += " -";
+
+    LOG_INF("%s: running: %s\n", __func__, cmd.c_str());
+
+    data.clear();
+#if defined(_WIN32)
+    FILE * pipe = _popen(cmd.c_str(), "rb");
+#else
+    FILE * pipe = popen(cmd.c_str(), "rb");
+#endif
+    if (!pipe) {
+        LOG_ERR("%s: failed to launch ffmpeg\n", __func__);
+        return -1;
+    }
+    unsigned char chunk[4096];
+    size_t n;
+    while ((n = fread(chunk, 1, sizeof(chunk), pipe)) > 0) {
+        data.insert(data.end(), chunk, chunk + n);
+    }
+#if defined(_WIN32)
+    int rc = _pclose(pipe);
+#else
+    int rc = pclose(pipe);
+#endif
+    if (rc != 0) {
+        LOG_ERR("%s: ffmpeg exited with code %d\n", __func__, rc);
+        return -1;
+    }
+    if (data.empty()) {
+        LOG_ERR("%s: ffmpeg produced no output\n", __func__);
+        return -1;
+    }
+    size_t frame_size = (size_t) nx * ny * 3;
+    if (data.size() % frame_size != 0) {
+        LOG_ERR("%s: ffmpeg output size (%zu) is not a multiple of frame size (%zu)\n", __func__, data.size(), frame_size);
+        return -1;
+    }
+    nt = (uint32_t) (data.size() / frame_size);
+    return 0;
+}
+
+mtmd_bitmap * mtmd_helper_bitmap_init_from_video(mtmd_context * ctx, const char * fname, float fps, int max_frames) {
+    if (!ctx) {
+        LOG_ERR("%s: ctx is null\n", __func__);
+        return nullptr;
+    }
+    if (!mtmd_support_vision(ctx)) {
+        LOG_ERR("%s: model does not support vision input\n", __func__);
+        return nullptr;
+    }
+    if (!fname) {
+        LOG_ERR("%s: filename is null\n", __func__);
+        return nullptr;
+    }
+    if (fps <= 0) {
+        LOG_ERR("%s: fps must be > 0\n", __func__);
+        return nullptr;
+    }
+
+    uint32_t nx = 0, ny = 0, nt = 0;
+    std::vector<unsigned char> data;
+    if (video_extract_frames(fname, fps, max_frames, nx, ny, nt, data) != 0) {
+        return nullptr;
+    }
+
+    return mtmd_bitmap_init_from_seq(nx, ny, nt, data.data());
 }

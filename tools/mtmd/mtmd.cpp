@@ -26,9 +26,11 @@
 
 // represents raw image data, layout is RGBRGBRGB...
 // length of data must be nx * ny * 3
+// for sequence of images (i.e. video): data is nt sequential RGB frames, each nx * ny * 3 bytes
 struct mtmd_bitmap {
     uint32_t nx;
     uint32_t ny;
+    uint32_t nt = 1; // 1 for single images, >= 2 (even) for sequence
     std::vector<unsigned char> data;
     std::string id; // optional user-defined id, for ex: can be set to image hash, useful for KV cache tracking
     bool is_audio = false; // true if the bitmap is audio
@@ -769,6 +771,9 @@ struct mtmd_tokenizer {
     }
 
     int32_t add_media(const mtmd_bitmap * bitmap) {
+        if (bitmap->nt >= 2) {
+            return add_seq_image(bitmap);
+        }
         if (!bitmap->is_audio) {
             // handle image
 
@@ -981,6 +986,73 @@ struct mtmd_tokenizer {
         return 0;
     }
 
+    int32_t add_seq_image(const mtmd_bitmap * bitmap) {
+        GGML_ASSERT(ctx->ctx_v);
+        GGML_ASSERT(bitmap->nt > 1);
+        // TODO [QWEN_VIDEO]: we only support even frames (Qwen-VL style) for now
+        GGML_ASSERT(bitmap->nt % 2 == 0);
+        bool support_seq = clip_model_supports_seq_input(ctx->ctx_v);
+        if (!support_seq) {
+            LOG_ERR("%s: error: model does not support sequential image input (usually requires Qwen-VL style models)\n", __func__);
+            return 2;
+        }
+
+        const uint32_t n_frames = bitmap->nt;
+        const size_t   frame_bytes = (size_t)bitmap->nx * bitmap->ny * 3;
+
+        // preprocess each frame individually
+        clip_image_f32_batch all_frames;
+        all_frames.is_seq = true;
+        all_frames.grid_x = 0; // currently, we don't support tiling for video input
+        all_frames.grid_y = 0; // currently, we don't support tiling for video input
+
+        for (uint32_t f = 0; f < n_frames; f++) {
+            clip_image_u8_ptr img_u8(clip_image_u8_init());
+            img_u8->nx = bitmap->nx;
+            img_u8->ny = bitmap->ny;
+            img_u8->buf.resize(frame_bytes);
+            std::memcpy(img_u8->buf.data(), bitmap->data.data() + f * frame_bytes, frame_bytes);
+
+            clip_image_f32_batch frame_batch;
+            bool ok = ctx->image_preproc->preprocess(*img_u8, frame_batch);
+            if (!ok) {
+                LOG_ERR("Unable to preprocess image\n");
+                return 2;
+            }
+            GGML_ASSERT(frame_batch.entries.size() == 1);
+            all_frames.entries.push_back(std::move(frame_batch.entries[0]));
+        }
+
+        mtmd_image_tokens_ptr image_tokens(new mtmd_image_tokens);
+        if (mtmd_decode_use_mrope(ctx)) {
+            // for Qwen2VL, we need this information for M-RoPE decoding positions
+            image_tokens->nx = clip_n_output_tokens_x(ctx->ctx_v, all_frames.entries[0].get());
+            image_tokens->ny = clip_n_output_tokens_y(ctx->ctx_v, all_frames.entries[0].get());
+            image_tokens->pos = MTMD_POS_TYPE_MROPE;
+        } else {
+            GGML_ASSERT(false && "not supported");
+        }
+        image_tokens->batch_f32 = std::move(all_frames);
+        image_tokens->id = bitmap->id; // optional
+
+        LOG_DBG("seq_image: nt=%u, nx=%u, ny=%u, n_tokens=%u\n",
+                bitmap->nt, image_tokens->nx, image_tokens->ny, image_tokens->n_tokens());
+
+        mtmd_input_chunk chunk{
+            MTMD_INPUT_CHUNK_TYPE_IMAGE,
+            {}, // text tokens
+            std::move(image_tokens),
+            nullptr, // audio tokens
+        };
+        cur.entries.emplace_back(std::move(chunk));
+
+        if (!ctx->img_end.empty()) {
+            add_text(ctx->img_end, true);
+        }
+
+        return 0;
+    }
+
     std::vector<mtmd_input_chunk> split_batch_to_chunk(clip_image_f32_batch && batch_f32, const std::string & id) {
         std::vector<mtmd_input_chunk> chunks;
 
@@ -1179,9 +1251,45 @@ mtmd_bitmap * mtmd_bitmap_init(uint32_t nx,
     mtmd_bitmap * bitmap = new mtmd_bitmap;
     bitmap->nx = nx;
     bitmap->ny = ny;
+    bitmap->nt = 1;
     size_t data_size = (size_t)nx * ny * 3;
     bitmap->data.resize(data_size);
     std::memcpy(bitmap->data.data(), data, data_size);
+    return bitmap;
+}
+
+mtmd_bitmap * mtmd_bitmap_init_from_seq(uint32_t nx,
+                                        uint32_t ny,
+                                        uint32_t nt,
+                                        const unsigned char * data) {
+    if (nt == 0) {
+        LOG_ERR("%s: error: nt must be greater than 0 for sequence input\n", __func__);
+        return nullptr;
+    }
+    if (nt == 1) {
+        // if nt == 1, it's not really a sequence, we can treat it as a single image
+        return mtmd_bitmap_init(nx, ny, data);
+    }
+    // TODO [QWEN_VIDEO]: we only support Qwen-VL style for now, which requires even number of frames
+    // therefore, we duplicate the last frame if nt is odd, to avoid issues in video preprocessing
+    bool is_odd = (nt % 2 == 1);
+    if (is_odd) {
+        nt += 1;
+    }
+    size_t frame_size = (size_t)nx * ny * 3;
+    mtmd_bitmap * bitmap = new mtmd_bitmap;
+    bitmap->nx = nx;
+    bitmap->ny = ny;
+    bitmap->nt = nt;
+    size_t data_size = frame_size * nt;
+    bitmap->data.resize(data_size);
+    std::memcpy(bitmap->data.data(), data, data_size);
+    if (is_odd) {
+        // duplicate the last frame
+        std::memcpy(bitmap->data.data() + (nt - 1) * frame_size,
+                    data + (nt - 2) * frame_size,
+                    frame_size);
+    }
     return bitmap;
 }
 
@@ -1190,6 +1298,7 @@ mtmd_bitmap * mtmd_bitmap_init_from_audio(size_t n_samples,
     mtmd_bitmap * bitmap = new mtmd_bitmap;
     bitmap->nx = n_samples;
     bitmap->ny = 1;
+    bitmap->nt = 1;
     bitmap->is_audio = true;
     size_t data_size = n_samples * sizeof(float);
     bitmap->data.resize(data_size);
@@ -1205,6 +1314,10 @@ uint32_t mtmd_bitmap_get_ny(const mtmd_bitmap * bitmap) {
     return bitmap->ny;
 }
 
+uint32_t mtmd_bitmap_get_nt(const mtmd_bitmap * bitmap) {
+    return bitmap->nt;
+}
+
 const unsigned char * mtmd_bitmap_get_data(const mtmd_bitmap * bitmap) {
     return bitmap->data.data();
 }
@@ -1215,6 +1328,10 @@ size_t mtmd_bitmap_get_n_bytes(const mtmd_bitmap * bitmap) {
 
 bool mtmd_bitmap_is_audio(const mtmd_bitmap * bitmap) {
     return bitmap->is_audio;
+}
+
+bool mtmd_bitmap_is_seq(const mtmd_bitmap * bitmap) {
+    return bitmap->nt >= 2;
 }
 
 const char * mtmd_bitmap_get_id(const mtmd_bitmap * bitmap) {
@@ -1429,6 +1546,32 @@ llama_pos mtmd_image_tokens_get_n_pos(const mtmd_image_tokens * image_tokens) {
 
 // test function
 
+int mtmd_test_bitmap_is_seq() {
+    const uint32_t nx = 4;
+    const uint32_t ny = 4;
+    const uint32_t nt = 2;
+    const size_t   frame_bytes = (size_t) nx * ny * 3;
+    std::vector<unsigned char> data(frame_bytes * nt, 0);
+
+    mtmd_bitmap * bitmap = mtmd_bitmap_init_from_seq(nx, ny, nt, data.data());
+    if (bitmap == nullptr) {
+        fprintf(stderr, "%s: mtmd_bitmap_init_from_seq returned nullptr\n", __func__);
+        return 1;
+    }
+    if (!mtmd_bitmap_is_seq(bitmap)) {
+        fprintf(stderr, "%s: expected is_seq=true for nt=%u\n", __func__, nt);
+        mtmd_bitmap_free(bitmap);
+        return 1;
+    }
+    if (mtmd_bitmap_get_nt(bitmap) != nt) {
+        fprintf(stderr, "%s: expected nt=%u, got nt=%u\n", __func__, nt, mtmd_bitmap_get_nt(bitmap));
+        mtmd_bitmap_free(bitmap);
+        return 1;
+    }
+    mtmd_bitmap_free(bitmap);
+    return 0;
+}
+
 mtmd_input_chunks * mtmd_test_create_input_chunks() {
     mtmd_input_chunks * chunks = mtmd_input_chunks_init();
     if (!chunks) {
@@ -1613,4 +1756,91 @@ std::map<ggml_backend_dev_t, size_t> mtmd_get_memory_usage(const char * mmproj_f
         LOG_ERR("%s: error: %s\n", __func__, e.what());
         return {};
     }
+}
+
+// test helper: extract raw RGB frames from a video file via ffmpeg/ffprobe subprocess.
+// returns 0 on success, non-zero on failure. on success, fills out_nx/out_ny/out_nt.
+int mtmd_test_video_extract(const char * fname, float fps, int max_frames,
+                              uint32_t * out_nx, uint32_t * out_ny, uint32_t * out_nt) {
+    if (!fname || !out_nx || !out_ny || !out_nt) {
+        fprintf(stderr, "%s: null argument\n", __func__);
+        return 1;
+    }
+    if (fps <= 0.0f) {
+        fprintf(stderr, "%s: fps must be > 0\n", __func__);
+        return 1;
+    }
+
+    // probe dimensions via ffprobe
+    std::string probe_cmd = std::string("ffprobe -v error -select_streams v:0 -show_entries stream=width,height -of csv=s=x:p=0 \"") + fname + "\"";
+#if defined(_WIN32)
+    FILE * probe_pipe = _popen(probe_cmd.c_str(), "r");
+#else
+    FILE * probe_pipe = popen(probe_cmd.c_str(), "r");
+#endif
+    if (!probe_pipe) {
+        fprintf(stderr, "%s: failed to launch ffprobe\n", __func__);
+        return 1;
+    }
+    char probe_buf[128] = {0};
+    char * probe_res = fgets(probe_buf, sizeof(probe_buf), probe_pipe);
+#if defined(_WIN32)
+    int probe_rc = _pclose(probe_pipe);
+#else
+    int probe_rc = pclose(probe_pipe);
+#endif
+    if (probe_res == nullptr || probe_rc != 0) {
+        fprintf(stderr, "%s: ffprobe failed (rc=%d)\n", __func__, probe_rc);
+        return 1;
+    }
+    int w = 0, h = 0;
+    if (sscanf(probe_buf, "%dx%d", &w, &h) != 2 || w <= 0 || h <= 0) {
+        fprintf(stderr, "%s: failed to parse ffprobe output: '%s'\n", __func__, probe_buf);
+        return 1;
+    }
+    *out_nx = (uint32_t) w;
+    *out_ny = (uint32_t) h;
+
+    // extract frames via ffmpeg
+    std::string extract_cmd = std::string("ffmpeg -hide_banner -loglevel error -i \"") + fname + "\" -vf \"fps=" + std::to_string(fps) + ",format=rgb24\" -f rawvideo";
+    if (max_frames > 0) {
+        extract_cmd += " -frames:v " + std::to_string(max_frames);
+    }
+    extract_cmd += " -";
+
+#if defined(_WIN32)
+    FILE * extract_pipe = _popen(extract_cmd.c_str(), "rb");
+#else
+    FILE * extract_pipe = popen(extract_cmd.c_str(), "rb");
+#endif
+    if (!extract_pipe) {
+        fprintf(stderr, "%s: failed to launch ffmpeg\n", __func__);
+        return 1;
+    }
+    std::vector<uint8_t> data;
+    uint8_t chunk[4096];
+    size_t n;
+    while ((n = fread(chunk, 1, sizeof(chunk), extract_pipe)) > 0) {
+        data.insert(data.end(), chunk, chunk + n);
+    }
+#if defined(_WIN32)
+    int extract_rc = _pclose(extract_pipe);
+#else
+    int extract_rc = pclose(extract_pipe);
+#endif
+    if (extract_rc != 0) {
+        fprintf(stderr, "%s: ffmpeg exited with code %d\n", __func__, extract_rc);
+        return 1;
+    }
+    if (data.empty()) {
+        fprintf(stderr, "%s: ffmpeg produced no output\n", __func__);
+        return 1;
+    }
+    size_t frame_size = (size_t) w * h * 3;
+    if (data.size() % frame_size != 0) {
+        fprintf(stderr, "%s: data size %zu is not a multiple of frame size %zu\n", __func__, data.size(), frame_size);
+        return 1;
+    }
+    *out_nt = (uint32_t) (data.size() / frame_size);
+    return 0;
 }

@@ -515,6 +515,7 @@ struct clip_image_u8_batch {
 struct clip_image_f32_batch {
     std::vector<clip_image_f32_ptr> entries;
     bool is_audio = false;
+    bool is_seq = true;
 
     // for llava-uhd style models, we need to know the grid size
     // note: entries.size() == grid_x * grid_y + 1 (one overview image)
@@ -525,6 +526,7 @@ struct clip_image_f32_batch {
         clip_image_f32_batch new_batch{
             /* entries  */ {},
             /* is_audio */ is_audio,
+            /* is_seq   */ is_seq,
             /* grid_x   */ grid_x,
             /* grid_y   */ grid_y,
         };

@@ -574,6 +574,9 @@ struct common_params {
     std::vector<std::string> image; // path to image file(s)
     int image_min_tokens = -1;
     int image_max_tokens = -1;
+    std::vector<std::string> video; // path to video file(s) — for video input via mtmd
+    float video_fps = 2.0f;
+    int   video_max_frames = 64;
 
     // finetune
     struct lr_opt lr;

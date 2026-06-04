@@ -133,16 +133,23 @@ MTMD_API int mtmd_get_audio_sample_rate(const mtmd_context * ctx);
 // if bitmap is image:
 //     length of data must be nx * ny * 3
 //     the data is in RGBRGBRGB... format
+// if bitmap is sequence of images (i.e. video):
+//     nt is the number of frames
+//     length of data must be nx * ny * 3 * nt
+//     frames are sequential RGB, each nx * ny * 3 bytes
 // if bitmap is audio:
 //     length of data must be n_samples * sizeof(float)
 //     the data is in float format (PCM F32)
 MTMD_API mtmd_bitmap *         mtmd_bitmap_init           (uint32_t nx, uint32_t ny, const unsigned char * data);
+MTMD_API mtmd_bitmap *         mtmd_bitmap_init_from_seq  (uint32_t nx, uint32_t ny, uint32_t nt, const unsigned char * data);
 MTMD_API mtmd_bitmap *         mtmd_bitmap_init_from_audio(size_t n_samples,         const float         * data);
 MTMD_API uint32_t              mtmd_bitmap_get_nx     (const mtmd_bitmap * bitmap);
 MTMD_API uint32_t              mtmd_bitmap_get_ny     (const mtmd_bitmap * bitmap);
+MTMD_API uint32_t              mtmd_bitmap_get_nt     (const mtmd_bitmap * bitmap);
 MTMD_API const unsigned char * mtmd_bitmap_get_data   (const mtmd_bitmap * bitmap);
 MTMD_API size_t                mtmd_bitmap_get_n_bytes(const mtmd_bitmap * bitmap);
 MTMD_API bool                  mtmd_bitmap_is_audio   (const mtmd_bitmap * bitmap);
+MTMD_API bool                  mtmd_bitmap_is_seq     (const mtmd_bitmap * bitmap);
 MTMD_API void                  mtmd_bitmap_free       (mtmd_bitmap * bitmap);
 // bitmap ID is optional, but useful for KV cache tracking
 // these getters/setters are dedicated functions, so you can for example calculate the hash of the image based on mtmd_bitmap_get_data()
@@ -184,6 +191,8 @@ MTMD_API void               mtmd_input_chunk_free(mtmd_input_chunk * chunk);
 // the instance will be constructed via mtmd_tokenize()
 // it will be freed along with mtmd_input_chunk
 MTMD_API size_t       mtmd_image_tokens_get_n_tokens(const mtmd_image_tokens * image_tokens); // TODO: deprecate
+MTMD_API size_t       mtmd_image_tokens_get_nx      (const mtmd_image_tokens * image_tokens);
+MTMD_API size_t       mtmd_image_tokens_get_ny      (const mtmd_image_tokens * image_tokens);
 MTMD_API const char * mtmd_image_tokens_get_id      (const mtmd_image_tokens * image_tokens); // TODO: deprecate
 // number of temporal positions (equals to max(t,h,w) for M-RoPE; equals to n_tokens otherwise)
 MTMD_API llama_pos    mtmd_image_tokens_get_n_pos   (const mtmd_image_tokens * image_tokens); // TODO: deprecate
@@ -257,6 +266,9 @@ MTMD_API struct mtmd_caps mtmd_get_cap_from_file(const char * mmproj_fname);
 
 // test function, to be used in test-mtmd-c-api.c
 MTMD_API mtmd_input_chunks * mtmd_test_create_input_chunks(void);
+MTMD_API int                  mtmd_test_bitmap_is_seq(void);
+MTMD_API int                  mtmd_test_video_extract(const char * fname, float fps, int max_frames,
+                                                        uint32_t * out_nx, uint32_t * out_ny, uint32_t * out_nt);
 
 #ifdef __cplusplus
 } // extern "C"
@@ -306,9 +318,14 @@ struct bitmap {
     bitmap(uint32_t nx, uint32_t ny, const unsigned char * data) {
         ptr.reset(mtmd_bitmap_init(nx, ny, data));
     }
+    bitmap(uint32_t nx, uint32_t ny, uint32_t nt, const unsigned char * data) {
+        ptr.reset(mtmd_bitmap_init_from_seq(nx, ny, nt, data));
+    }
     ~bitmap() = default;
-    uint32_t nx() const { return mtmd_bitmap_get_nx(ptr.get()); }
-    uint32_t ny() const { return mtmd_bitmap_get_ny(ptr.get()); }
+    uint32_t nx()     const { return mtmd_bitmap_get_nx(ptr.get()); }
+    uint32_t ny()     const { return mtmd_bitmap_get_ny(ptr.get()); }
+    uint32_t nt()     const { return mtmd_bitmap_get_nt(ptr.get()); }
+    bool     is_seq() const { return mtmd_bitmap_is_seq(ptr.get()); }
     const unsigned char * data() const { return mtmd_bitmap_get_data(ptr.get()); }
     size_t n_bytes() const { return mtmd_bitmap_get_n_bytes(ptr.get()); }
     std::string id() const { return mtmd_bitmap_get_id(ptr.get()); }

@@ -2224,6 +2224,33 @@ common_params_context common_params_parser_init(common_params & params, llama_ex
         }
     ).set_examples({LLAMA_EXAMPLE_MTMD, LLAMA_EXAMPLE_CLI}));
     add_opt(common_arg(
+        {"--video"}, "FILE",
+        "path to a video file. use with multimodal models that support video (e.g., Qwen3-VL). can be specified multiple times.\n",
+        [](common_params & params, const std::string & value) {
+            for (const auto & item : parse_csv_row(value)) {
+                params.video.emplace_back(item);
+            }
+        }
+    ).set_examples({LLAMA_EXAMPLE_MTMD}));
+    add_opt(common_arg(
+        {"--video-fps"}, "F",
+        string_format(
+            "frames per second to sample from video (default: %.1f)\n",
+            (double)params.video_fps),
+        [](common_params & params, const std::string & value) {
+            params.video_fps = std::stof(value);
+        }
+    ).set_examples({LLAMA_EXAMPLE_MTMD}));
+    add_opt(common_arg(
+        {"--video-max-frames"}, "N",
+        string_format(
+            "max number of frames to extract from each video (default: %d, 0 = no limit)\n",
+            params.video_max_frames),
+        [](common_params & params, int value) {
+            params.video_max_frames = value;
+        }
+    ).set_examples({LLAMA_EXAMPLE_MTMD}));
+    add_opt(common_arg(
         {"--image-min-tokens"}, "N",
         "minimum number of tokens each image can take, only used by vision models with dynamic resolution (default: read from model)",
         [](common_params & params, int value) {

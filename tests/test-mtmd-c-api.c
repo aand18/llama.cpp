@@ -59,6 +59,48 @@ int main(void) {
     // Free the chunks
     mtmd_input_chunks_free(chunks);
 
+    // Test that sequence bitmap API is wired up: a bitmap with nt=2 must
+    // be reported as a sequence and have nt=2.
+    int seq_res = mtmd_test_bitmap_is_seq();
+    if (seq_res != 0) {
+        fprintf(stderr, "mtmd_test_bitmap_is_seq failed (code=%d)\n", seq_res);
+        return 1;
+    }
+    printf("Sequence bitmap API check: OK\n");
+
+    // Smoke test: video extraction via ffmpeg subprocess.
+    // Generate a small synthetic test video, then verify the extraction
+    // helper produces frames with the expected dimensions and count.
+    // Requires ffmpeg and ffprobe to be on PATH.
+    {
+        const char * test_video = "test_video_mtmd.mp4";
+        char create_cmd[512];
+        snprintf(create_cmd, sizeof(create_cmd),
+            "ffmpeg -y -hide_banner -loglevel error -f lavfi -i testsrc=duration=1:size=320x240:rate=30 \"%s\"",
+            test_video);
+        int create_rc = system(create_cmd);
+        if (create_rc != 0) {
+            fprintf(stderr, "Failed to create test video (ffmpeg rc=%d). ffmpeg must be on PATH.\n", create_rc);
+            return 1;
+        }
+        uint32_t vx = 0, vy = 0, vt = 0;
+        int vres = mtmd_test_video_extract(test_video, 5.0f, 8, &vx, &vy, &vt);
+        remove(test_video);
+        if (vres != 0) {
+            fprintf(stderr, "mtmd_test_video_extract failed (code=%d)\n", vres);
+            return 1;
+        }
+        if (vx != 320 || vy != 240) {
+            fprintf(stderr, "Expected 320x240, got %ux%u\n", vx, vy);
+            return 1;
+        }
+        if (vt < 2) {
+            fprintf(stderr, "Expected nt >= 2, got nt=%u\n", vt);
+            return 1;
+        }
+        printf("Video extraction smoke test: OK (nx=%u, ny=%u, nt=%u)\n", vx, vy, vt);
+    }
+
     printf("\n\nDONE: test libmtmd C API...\n");
 
     return 0;

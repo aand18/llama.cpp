@@ -523,7 +523,7 @@ ggml_tensor * clip_graph::build_inp() {
 }
 
 ggml_tensor * clip_graph::build_inp_raw(int channels) {
-    ggml_tensor * inp_raw = ggml_new_tensor_3d(ctx0, GGML_TYPE_F32, img.nx, img.ny, channels);
+    ggml_tensor * inp_raw = ggml_new_tensor_4d(ctx0, GGML_TYPE_F32, img.nx, img.ny, channels, nt);
     ggml_set_name(inp_raw, "inp_raw");
     ggml_set_input(inp_raw);
     return inp_raw;
@@ -992,6 +992,9 @@ static ggml_cgraph * clip_image_build_graph(clip_ctx * ctx, const clip_image_f32
         default:
             GGML_ABORT("missing cgraph builder");
     }
+
+    // TODO [QWEN_VIDEO]: improve this in the future
+    builder->nt = imgs.entries.size();
 
     return builder->build();
 }
@@ -3375,10 +3378,11 @@ bool clip_image_encode(struct clip_ctx * ctx, const int n_threads, clip_image_f3
 bool clip_image_batch_encode(clip_ctx * ctx, const int n_threads, const clip_image_f32_batch * imgs_c_ptr, float * vec) {
     const clip_image_f32_batch & imgs = *imgs_c_ptr;
     int batch_size = imgs.entries.size();
+    bool support_seq = clip_model_supports_seq_input(ctx);
 
     // TODO @ngxson : implement batch size > 1 as a loop
     //                we don't need true batching support because the cgraph will gonna be big anyway
-    if (batch_size != 1) {
+    if (batch_size != 1 && !support_seq) {
         return false; // only support batch size of 1
     }
 
@@ -3449,6 +3453,8 @@ bool clip_image_batch_encode(clip_ctx * ctx, const int n_threads, const clip_ima
         // │     H │  channel = B
         // └─────┘ │
         //   ──────┘ x B
+
+        // IMPORTANT: [QWEN_VIDEO] the batch dim is currently used for temporal dim in Qwen-VL models
 
         for (size_t i = 0; i < imgs.entries.size(); i++) {
             const int nx = imgs.entries[i]->nx;
@@ -4358,6 +4364,32 @@ bool clip_has_vision_encoder(const struct clip_ctx * ctx) {
 
 bool clip_has_audio_encoder(const struct clip_ctx * ctx) {
     return ctx->model.modality == CLIP_MODALITY_AUDIO;
+}
+
+bool clip_has_whisper_encoder(const struct clip_ctx * ctx) {
+    switch (ctx->proj_type()) {
+        case PROJECTOR_TYPE_ULTRAVOX:
+        case PROJECTOR_TYPE_QWEN2A:
+        case PROJECTOR_TYPE_QWEN3A:
+        case PROJECTOR_TYPE_GLMA:
+        case PROJECTOR_TYPE_VOXTRAL:
+        case PROJECTOR_TYPE_MERALION:
+        case PROJECTOR_TYPE_MUSIC_FLAMINGO:
+            return true;
+        default:
+            return false;
+    }
+}
+
+bool clip_model_supports_seq_input(const struct clip_ctx * ctx) {
+    switch (ctx->proj_type()) {
+        case PROJECTOR_TYPE_QWEN2VL:
+        case PROJECTOR_TYPE_QWEN25VL:
+        case PROJECTOR_TYPE_QWEN3VL:
+            return true;
+        default:
+            return false;
+    }
 }
 
 bool clip_encode_float_image (struct clip_ctx * ctx, int n_threads, float * img, int h, int w, float * vec) {
