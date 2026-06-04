@@ -98,7 +98,11 @@ int main(void) {
             fprintf(stderr, "Expected nt >= 2, got nt=%u\n", vt);
             return 1;
         }
-        printf("Video extraction smoke test: OK (nx=%u, ny=%u, nt=%u)\n", vx, vy, vt);
+        if (vt % 2 != 0) {
+            fprintf(stderr, "Expected nt to be even (FRAME_FACTOR=2), got nt=%u\n", vt);
+            return 1;
+        }
+        printf("Video extraction smoke test: OK (nx=%u, ny=%u, nt=%u, nt%%2=%u)\n", vx, vy, vt, vt % 2);
     }
 
     printf("\n\nDONE: test libmtmd C API...\n");

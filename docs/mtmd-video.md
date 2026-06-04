@@ -86,6 +86,7 @@ printf '/video C:\temp\qwen-test\test.mp4\nDescribe it.\n/quit\n' | `
 - **No MTP / ngram-mod interaction tested.** The user's production server uses `--spec-type ngram-mod,draft-mtp`. The 27B test above skipped speculative decoding. May need additional position handling for MTP draft to see video positions correctly.
 - **Server-side not implemented.** Tracking upstream [issue #18389](https://github.com/ggml-org/llama.cpp/issues/18389).
 - **`mtmd_image_tokens_get_n_pos`** returns `max(nx, ny)` for MROPE — does not include the temporal dim. For `nt=2` this happens to be correct (frames share a 2D grid), but for `nt>2` it would under-count.
+- **Odd frame counts are rounded down to even** (matching qwen-vl-utils `FRAME_FACTOR=2`). If `ffmpeg ... fps=N` produces an odd `nt` (e.g. `fps=2.5` × 5 s → 13 raw → 12 after fix), the helper drops the trailing frame and logs a `LOG_WRN`. This keeps the `qwen2vl.cpp:25` `nt<=2` constraint and the upstream temporal-pair assumption satisfied without an extra argument. Behaviour mirrors the official `qwen3-vl-utils.fetch_video()` `floor_by_factor(nframes, 2)` step.
 
 ## Follow-up work (in priority order)
 
@@ -102,7 +103,7 @@ The actual PR text **must be human-written** per the project's `AGENTS.md` polic
 - **What**: adds `--video` to `llama-mtmd-cli`; ffmpeg subprocess extracts frames; new seq bitmap API
 - **Why**: upstream tracking issue #18389; the maintainer's planned approach
 - **What was carried in from upstream**: cite PR #21858 and commit `c5b682b`
-- **What was fixed in the port**: two bugs (dispatch + assert) that block the new code path
+- **What was fixed in the port**: two bugs (dispatch + assert) that block the new code path, plus odd `nt` rounding to align with qwen-vl-utils `FRAME_FACTOR=2`
 - **What was added locally**: ffmpeg extraction, CLI flags, CUDA v13.1 build fix
 - **Test evidence**: table above (2B + 27B on GPU)
 - **Known limit**: `nt<=2` encoder cap; cite PR comment "we only support even frames for now"

@@ -1842,5 +1842,14 @@ int mtmd_test_video_extract(const char * fname, float fps, int max_frames,
         return 1;
     }
     *out_nt = (uint32_t) (data.size() / frame_size);
+    if (*out_nt % 2 != 0) {
+        // Align with qwen-vl-utils FRAME_FACTOR=2 and the qwen2vl.cpp nt<=2 limit
+        // by dropping the trailing frame when the count is odd. This helper returns
+        // metadata only; the production helper in mtmd-helper.cpp also resizes the
+        // data buffer to match.
+        *out_nt -= 1;
+        fprintf(stderr, "%s: odd frame count, dropped last frame to align to FRAME_FACTOR=2 (nt=%u)\n",
+                __func__, *out_nt);
+    }
     return 0;
 }
