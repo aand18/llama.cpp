@@ -844,7 +844,9 @@ ggml_tensor * clip_graph::build_patch_merge_permute(ggml_tensor * cur, int scale
 }
 
 static ggml_cgraph * clip_image_build_graph(clip_ctx * ctx, const clip_image_f32_batch & imgs) {
-    GGML_ASSERT(imgs.entries.size() == 1 && "n_batch > 1 is not supported");
+    if (!clip_model_supports_seq_input(ctx)) {
+        GGML_ASSERT(imgs.entries.size() == 1 && "n_batch > 1 is not supported");
+    }
 
     const clip_image_f32 & img = *imgs.entries[0];
     std::unique_ptr<clip_graph> builder;
