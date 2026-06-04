@@ -1612,6 +1612,49 @@ mtmd_input_chunks * mtmd_test_create_input_chunks() {
     return chunks;
 }
 
+int mtmd_test_encode_bitmap(mtmd_context * ctx, const mtmd_bitmap * bitmap, std::vector<float> & out) {
+    if (!ctx || !bitmap) {
+        LOG_ERR("%s: null argument\n", __func__);
+        return 1;
+    }
+    const mtmd_bitmap * bitmaps[] = { bitmap };
+    mtmd_input_text text;
+    text.text          = mtmd_default_marker();
+    text.add_special   = false;
+    text.parse_special = false;
+    mtmd_input_chunks * chunks = mtmd_input_chunks_init();
+    if (!chunks) {
+        return 1;
+    }
+    int rc = mtmd_tokenize(ctx, chunks, &text, bitmaps, 1);
+    if (rc != 0) {
+        LOG_ERR("%s: mtmd_tokenize failed (rc=%d)\n", __func__, rc);
+        mtmd_input_chunks_free(chunks);
+        return 1;
+    }
+    const mtmd_input_chunk * image_chunk = nullptr;
+    for (size_t i = 0; i < mtmd_input_chunks_size(chunks); i++) {
+        const mtmd_input_chunk * c = mtmd_input_chunks_get(chunks, i);
+        if (mtmd_input_chunk_get_type(c) == MTMD_INPUT_CHUNK_TYPE_IMAGE) {
+            image_chunk = c;
+            break;
+        }
+    }
+    if (!image_chunk) {
+        LOG_ERR("%s: no image chunk found in tokenized output\n", __func__);
+        mtmd_input_chunks_free(chunks);
+        return 1;
+    }
+    rc = mtmd_encode_chunk(ctx, image_chunk);
+    mtmd_input_chunks_free(chunks);
+    if (rc != 0) {
+        LOG_ERR("%s: mtmd_encode_chunk failed\n", __func__);
+        return 1;
+    }
+    out.assign(ctx->image_embd_v.begin(), ctx->image_embd_v.end());
+    return 0;
+}
+
 void mtmd_log_set(ggml_log_callback log_callback, void * user_data) {
     g_logger_state.log_callback = log_callback ? log_callback : clip_log_callback_default;
     g_logger_state.log_callback_user_data = user_data;
