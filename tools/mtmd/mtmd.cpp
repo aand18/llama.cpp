@@ -1770,11 +1770,11 @@ std::map<ggml_backend_dev_t, size_t> mtmd_get_memory_usage(const char * mmproj_f
 int mtmd_test_video_extract(const char * fname, float fps, int max_frames,
                               uint32_t * out_nx, uint32_t * out_ny, uint32_t * out_nt) {
     if (!fname || !out_nx || !out_ny || !out_nt) {
-        fprintf(stderr, "%s: null argument\n", __func__);
+        LOG_ERR("%s: null argument\n", __func__);
         return 1;
     }
     if (fps <= 0.0f) {
-        fprintf(stderr, "%s: fps must be > 0\n", __func__);
+        LOG_ERR("%s: fps must be > 0\n", __func__);
         return 1;
     }
 
@@ -1786,7 +1786,7 @@ int mtmd_test_video_extract(const char * fname, float fps, int max_frames,
     FILE * probe_pipe = popen(probe_cmd.c_str(), "r");
 #endif
     if (!probe_pipe) {
-        fprintf(stderr, "%s: failed to launch ffprobe\n", __func__);
+        LOG_ERR("%s: failed to launch ffprobe\n", __func__);
         return 1;
     }
     char probe_buf[128] = {0};
@@ -1797,12 +1797,12 @@ int mtmd_test_video_extract(const char * fname, float fps, int max_frames,
     int probe_rc = pclose(probe_pipe);
 #endif
     if (probe_res == nullptr || probe_rc != 0) {
-        fprintf(stderr, "%s: ffprobe failed (rc=%d)\n", __func__, probe_rc);
+        LOG_ERR("%s: ffprobe failed (rc=%d)\n", __func__, probe_rc);
         return 1;
     }
     int w = 0, h = 0;
     if (sscanf(probe_buf, "%dx%d", &w, &h) != 2 || w <= 0 || h <= 0) {
-        fprintf(stderr, "%s: failed to parse ffprobe output: '%s'\n", __func__, probe_buf);
+        LOG_ERR("%s: failed to parse ffprobe output: '%s'\n", __func__, probe_buf);
         return 1;
     }
     *out_nx = (uint32_t) w;
@@ -1821,7 +1821,7 @@ int mtmd_test_video_extract(const char * fname, float fps, int max_frames,
     FILE * extract_pipe = popen(extract_cmd.c_str(), "rb");
 #endif
     if (!extract_pipe) {
-        fprintf(stderr, "%s: failed to launch ffmpeg\n", __func__);
+        LOG_ERR("%s: failed to launch ffmpeg\n", __func__);
         return 1;
     }
     std::vector<uint8_t> data;
@@ -1836,16 +1836,16 @@ int mtmd_test_video_extract(const char * fname, float fps, int max_frames,
     int extract_rc = pclose(extract_pipe);
 #endif
     if (extract_rc != 0) {
-        fprintf(stderr, "%s: ffmpeg exited with code %d\n", __func__, extract_rc);
+        LOG_ERR("%s: ffmpeg exited with code %d\n", __func__, extract_rc);
         return 1;
     }
     if (data.empty()) {
-        fprintf(stderr, "%s: ffmpeg produced no output\n", __func__);
+        LOG_ERR("%s: ffmpeg produced no output\n", __func__);
         return 1;
     }
     size_t frame_size = (size_t) w * h * 3;
     if (data.size() % frame_size != 0) {
-        fprintf(stderr, "%s: data size %zu is not a multiple of frame size %zu\n", __func__, data.size(), frame_size);
+        LOG_ERR("%s: data size %zu is not a multiple of frame size %zu\n", __func__, data.size(), frame_size);
         return 1;
     }
     *out_nt = (uint32_t) (data.size() / frame_size);
@@ -1855,7 +1855,7 @@ int mtmd_test_video_extract(const char * fname, float fps, int max_frames,
         // metadata only; the production helper in mtmd-helper.cpp also resizes the
         // data buffer to match.
         *out_nt -= 1;
-        fprintf(stderr, "%s: odd frame count, dropped last frame to align to FRAME_FACTOR=2 (nt=%u)\n",
+        LOG_WRN("%s: odd frame count, dropped last frame to align to FRAME_FACTOR=2 (nt=%u)\n",
                 __func__, *out_nt);
     }
     return 0;

@@ -44,7 +44,8 @@ static void show_additional_info(int /*argc*/, char ** argv) {
         "  -m and --mmproj are required\n"
         "  -hf user/repo can replace both -m and --mmproj in most cases\n"
         "  --image, --audio, --video and -p are optional, if NOT provided, the CLI will run in chat mode\n"
-        "  to disable using GPU for mmproj model, add --no-mmproj-offload\n",
+        "  to disable using GPU for mmproj model, add --no-mmproj-offload\n"
+        "  --video requires ffmpeg and ffprobe on PATH\n",
         argv[0]
     );
 }

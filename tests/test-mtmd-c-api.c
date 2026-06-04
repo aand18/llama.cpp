@@ -131,24 +131,45 @@ int main(void) {
         }
         uint32_t vx = 0, vy = 0, vt = 0;
         int vres = mtmd_test_video_extract(test_video, 5.0f, 8, &vx, &vy, &vt);
-        remove(test_video);
         if (vres != 0) {
             fprintf(stderr, "mtmd_test_video_extract failed (code=%d)\n", vres);
+            remove(test_video);
             return 1;
         }
         if (vx != 320 || vy != 240) {
             fprintf(stderr, "Expected 320x240, got %ux%u\n", vx, vy);
+            remove(test_video);
             return 1;
         }
         if (vt < 2) {
             fprintf(stderr, "Expected nt >= 2, got nt=%u\n", vt);
+            remove(test_video);
             return 1;
         }
         if (vt % 2 != 0) {
             fprintf(stderr, "Expected nt to be even (FRAME_FACTOR=2), got nt=%u\n", vt);
+            remove(test_video);
             return 1;
         }
         printf("Video extraction smoke test: OK (nx=%u, ny=%u, nt=%u, nt%%2=%u)\n", vx, vy, vt, vt % 2);
+
+        // Error-path coverage: non-existent file and invalid fps must
+        // return non-zero without crashing. Run before the cleanup remove().
+        int nrc = mtmd_test_video_extract("does_not_exist_xyz.mp4", 1.0f, 4, &vx, &vy, &vt);
+        if (nrc == 0) {
+            fprintf(stderr, "Expected non-zero return for missing file, got 0\n");
+            remove(test_video);
+            return 1;
+        }
+        int frc = mtmd_test_video_extract(test_video, 0.0f, 4, &vx, &vy, &vt);
+        if (frc == 0) {
+            fprintf(stderr, "Expected non-zero return for fps=0, got 0\n");
+            remove(test_video);
+            return 1;
+        }
+        printf("Video extraction error-path tests: OK (missing file=%d, fps=0=%d)\n", nrc, frc);
+
+        remove(test_video);
     }
 
     printf("\n\nDONE: test libmtmd C API...\n");
