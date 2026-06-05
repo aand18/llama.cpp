@@ -3628,16 +3628,18 @@ bool clip_image_batch_encode(clip_ctx * ctx, const int n_threads, const clip_ima
                 const int merge_ratio = hparams.n_merge;
                 const int pw = image_size_width  / patch_size;
                 const int ph = image_size_height / patch_size;
-                std::vector<int> positions(n_pos * 4);
+                const int npairs = (int) imgs.entries.size() / 2;
+                const int stride  = num_patches * (npairs > 0 ? npairs : 1);
+                std::vector<int> positions(n_pos * 4 * (npairs > 0 ? npairs : 1));
                 int ptr = 0;
-                for (int y = 0; y < ph; y += merge_ratio) {
+                for (int y = 0; y < ph * (npairs > 0 ? npairs : 1); y += merge_ratio) {
                     for (int x = 0; x < pw; x += merge_ratio) {
                         for (int dy = 0; dy < 2; dy++) {
                             for (int dx = 0; dx < 2; dx++) {
-                                positions[                  ptr] = y + dy;
-                                positions[    num_patches + ptr] = x + dx;
-                                positions[2 * num_patches + ptr] = y + dy;
-                                positions[3 * num_patches + ptr] = x + dx;
+                                positions[              ptr] = y + dy;
+                                positions[    stride + ptr] = x + dx;
+                                positions[2 * stride + ptr] = y + dy;
+                                positions[3 * stride + ptr] = x + dx;
                                 ptr++;
                             }
                         }
@@ -4219,7 +4221,11 @@ bool clip_image_batch_encode(clip_ctx * ctx, const int n_threads, const clip_ima
 
     // sanity check (only support batch size of 1 for now)
     const int n_tokens_out = embeddings->ne[1];
-    const int expected_n_tokens_out = clip_n_output_tokens(ctx, imgs.entries[0].get());
+    int expected_n_tokens_out = clip_n_output_tokens(ctx, imgs.entries[0].get());
+    const int npairs = (int) imgs.entries.size() / 2;
+    if (npairs > 1) {
+        expected_n_tokens_out *= npairs;
+    }
     if (n_tokens_out != expected_n_tokens_out) {
         LOG_ERR("%s: expected output %d tokens, got %d\n", __func__, expected_n_tokens_out, n_tokens_out);
         GGML_ABORT("Invalid number of output tokens");

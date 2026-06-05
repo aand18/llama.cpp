@@ -6,8 +6,6 @@ ggml_cgraph * clip_graph_qwen3vl::build() {
     GGML_ASSERT(model.class_embedding == nullptr);
 
     const int batch_size       = 1;
-    const int n_pos            = n_patches;
-    const int num_position_ids = n_pos * 4; // m-rope requires 4 dim per position
 
     norm_type norm_t = NORM_TYPE_NORMAL;
 
@@ -15,20 +13,26 @@ ggml_cgraph * clip_graph_qwen3vl::build() {
 
     ggml_tensor * inp = build_inp_with_temporal_merge();
 
+    int h_dim = 0;
+
     // second conv dimension
     {
         inp = ggml_permute(ctx0, inp, 1, 2, 0, 3);  // [w, h, c, b] -> [c, w, h, b]
+        h_dim = (int) inp->ne[2];
         inp = ggml_cont_4d(
             ctx0, inp,
-            n_embd * 2, n_patches_x / 2, n_patches_y, batch_size);
+            n_embd * 2, n_patches_x / 2, h_dim, batch_size);
         inp = ggml_reshape_4d(
             ctx0, inp,
-            n_embd * 2, n_patches_x / 2, 2, batch_size * (n_patches_y / 2));
+            n_embd * 2, n_patches_x / 2, 2, batch_size * (h_dim / 2));
         inp = ggml_permute(ctx0, inp, 0, 2, 1, 3);
         inp = ggml_cont_3d(
             ctx0, inp,
-            n_embd, n_patches_x * n_patches_y, batch_size);
+            n_embd, n_patches_x * h_dim, batch_size);
     }
+
+    const int n_pos            = n_patches_x * h_dim;
+    const int num_position_ids = n_pos * 4; // m-rope requires 4 dim per position
 
     // add patch bias
     if (model.patch_bias != nullptr) {
@@ -38,16 +42,24 @@ ggml_cgraph * clip_graph_qwen3vl::build() {
 
     // calculate absolute position embedding and apply
     ggml_tensor * learned_pos_embd = resize_position_embeddings();
+    if (nt > 1) {
+        const uint32_t npairs = nt / 2;
+        ggml_tensor * tiled = learned_pos_embd;
+        for (uint32_t i = 1; i < npairs; i++) {
+            tiled = ggml_concat(ctx0, tiled, learned_pos_embd, 1);
+        }
+        learned_pos_embd = tiled;
+    }
     learned_pos_embd = ggml_cont_4d(
         ctx0, learned_pos_embd,
-        n_embd * 2, n_patches_x / 2, n_patches_y, batch_size);
+        n_embd * 2, n_patches_x / 2, h_dim, batch_size);
     learned_pos_embd = ggml_reshape_4d(
         ctx0, learned_pos_embd,
-        n_embd * 2, n_patches_x / 2, 2, batch_size * (n_patches_y / 2));
+        n_embd * 2, n_patches_x / 2, 2, batch_size * (h_dim / 2));
     learned_pos_embd = ggml_permute(ctx0, learned_pos_embd, 0, 2, 1, 3);
     learned_pos_embd = ggml_cont_3d(
         ctx0, learned_pos_embd,
-        n_embd, n_patches_x * n_patches_y, batch_size);
+        n_embd, n_patches_x * h_dim, batch_size);
     inp = ggml_add(ctx0, inp, learned_pos_embd);
     cb(inp, "inp_pos_emb", -1);
 

@@ -5,6 +5,7 @@ ggml_tensor * clip_graph_qwen2vl::build_inp_with_temporal_merge() {
 
     GGML_ASSERT(img.nx % (patch_size * 2) == 0);
     GGML_ASSERT(img.ny % (patch_size * 2) == 0);
+    GGML_ASSERT(nt == 1 || nt % 2 == 0);
 
     const size_t nb1 = ggml_row_size(inp_raw->type, img.nx);
     const size_t nb2 = nb1 * img.ny;
@@ -14,16 +15,23 @@ ggml_tensor * clip_graph_qwen2vl::build_inp_with_temporal_merge() {
         return ggml_add(ctx0,
             ggml_conv_2d(ctx0, model.patch_embeddings_0, inp_raw, patch_size, patch_size, 0, 0, 1, 1),
             ggml_conv_2d(ctx0, model.patch_embeddings_1, inp_raw, patch_size, patch_size, 0, 0, 1, 1));
-    } else if (nt == 2) {
-        // 2 frames input (video input)
-        ggml_tensor * inp_0 = ggml_view_3d(ctx0, inp_raw, img.nx, img.ny, 3, nb1, nb2, 0);
-        ggml_tensor * inp_1 = ggml_view_3d(ctx0, inp_raw, img.nx, img.ny, 3, nb1, nb2, nb2 * 3);
-        return ggml_add(ctx0,
-            ggml_conv_2d(ctx0, model.patch_embeddings_0, inp_0, patch_size, patch_size, 0, 0, 1, 1),
-            ggml_conv_2d(ctx0, model.patch_embeddings_1, inp_1, patch_size, patch_size, 0, 0, 1, 1));
-    } else {
-        GGML_ASSERT(false && "nt > 2 is not supported");
     }
+
+    const uint32_t npairs = nt / 2;
+    std::vector<ggml_tensor *> pair_outs;
+    pair_outs.reserve(npairs);
+    for (uint32_t i = 0; i < npairs; i++) {
+        ggml_tensor * inp_0 = ggml_view_3d(ctx0, inp_raw, img.nx, img.ny, 3, nb1, nb2, (size_t)(i * 2)     * nb2 * 3);
+        ggml_tensor * inp_1 = ggml_view_3d(ctx0, inp_raw, img.nx, img.ny, 3, nb1, nb2, (size_t)(i * 2 + 1) * nb2 * 3);
+        pair_outs.push_back(ggml_add(ctx0,
+            ggml_conv_2d(ctx0, model.patch_embeddings_0, inp_0, patch_size, patch_size, 0, 0, 1, 1),
+            ggml_conv_2d(ctx0, model.patch_embeddings_1, inp_1, patch_size, patch_size, 0, 0, 1, 1)));
+    }
+    ggml_tensor * out = pair_outs[0];
+    for (uint32_t i = 1; i < npairs; i++) {
+        out = ggml_concat(ctx0, out, pair_outs[i], 1);
+    }
+    return out;
 }
 
 ggml_cgraph * clip_graph_qwen2vl::build() {
@@ -33,8 +41,8 @@ ggml_cgraph * clip_graph_qwen2vl::build() {
     const int batch_size       = 1;
     const bool use_window_attn = hparams.n_wa_pattern > 0;
     const int n_wa_pattern     = hparams.n_wa_pattern;
-    const int n_pos            = n_patches;
-    const int num_position_ids = n_pos * 4; // m-rope requires 4 dim per position
+
+    GGML_ASSERT(!use_window_attn || nt == 1 && "video input requires no window attention");
 
     norm_type norm_t = proj_type == PROJECTOR_TYPE_QWEN25VL
         ? NORM_TYPE_RMS // qwen 2.5 vl
@@ -44,20 +52,26 @@ ggml_cgraph * clip_graph_qwen2vl::build() {
 
     ggml_tensor * inp = build_inp_with_temporal_merge();
 
+    int h_dim = 0;
+
     // second conv dimension
     {
         inp = ggml_permute(ctx0, inp, 1, 2, 0, 3);  // [w, h, c, b] -> [c, w, h, b]
+        h_dim = (int) inp->ne[2];
         inp = ggml_cont_4d(
             ctx0, inp,
-            n_embd * 2, n_patches_x / 2, n_patches_y, batch_size);
+            n_embd * 2, n_patches_x / 2, h_dim, batch_size);
         inp = ggml_reshape_4d(
             ctx0, inp,
-            n_embd * 2, n_patches_x / 2, 2, batch_size * (n_patches_y / 2));
+            n_embd * 2, n_patches_x / 2, 2, batch_size * (h_dim / 2));
         inp = ggml_permute(ctx0, inp, 0, 2, 1, 3);
         inp = ggml_cont_3d(
             ctx0, inp,
-            n_embd, n_patches_x * n_patches_y, batch_size);
+            n_embd, n_patches_x * h_dim, batch_size);
     }
+
+    const int n_pos            = n_patches_x * h_dim;
+    const int num_position_ids = n_pos * 4; // m-rope requires 4 dim per position
 
     ggml_tensor * inpL           = inp;
     ggml_tensor * window_mask    = nullptr;
@@ -88,7 +102,6 @@ ggml_cgraph * clip_graph_qwen2vl::build() {
             window_mask = ggml_cast(ctx0, window_mask, GGML_TYPE_F16);
         }
 
-        // inpL shape: [n_embd, n_patches_x * n_patches_y, batch_size]
         GGML_ASSERT(batch_size == 1);
         inpL = ggml_reshape_2d(ctx0, inpL, n_embd * 4, n_patches_x * n_patches_y * batch_size / 4);
         inpL = ggml_get_rows(ctx0, inpL, inv_window_idx);
@@ -115,9 +128,9 @@ ggml_cgraph * clip_graph_qwen2vl::build() {
             ggml_tensor * Vcur = ggml_add(ctx0,
                 build_mm(layer.v_w, cur), layer.v_b);
 
-            Qcur = ggml_reshape_3d(ctx0, Qcur, d_head, n_head, n_patches);
-            Kcur = ggml_reshape_3d(ctx0, Kcur, d_head, n_head, n_patches);
-            Vcur = ggml_reshape_3d(ctx0, Vcur, d_head, n_head, n_patches);
+            Qcur = ggml_reshape_3d(ctx0, Qcur, d_head, n_head, n_pos);
+            Kcur = ggml_reshape_3d(ctx0, Kcur, d_head, n_head, n_pos);
+            Vcur = ggml_reshape_3d(ctx0, Vcur, d_head, n_head, n_pos);
 
             cb(Qcur, "Qcur", il);
             cb(Kcur, "Kcur", il);
@@ -174,6 +187,7 @@ ggml_cgraph * clip_graph_qwen2vl::build() {
     }
 
     // multimodal projection
+    GGML_ASSERT(nt == 1 && "video input not yet supported in embeddings projection");
     ggml_tensor * embeddings = inpL;
     embeddings = ggml_reshape_3d(ctx0, embeddings, n_embd * 4, n_pos / 4, batch_size);
     embeddings = build_ffn(embeddings,
@@ -188,7 +202,6 @@ ggml_cgraph * clip_graph_qwen2vl::build() {
         ggml_set_name(window_idx, "window_idx");
         ggml_set_input(window_idx);
 
-        // embeddings shape: [n_embd, n_patches_x * n_patches_y, batch_size]
         GGML_ASSERT(batch_size == 1);
         embeddings = ggml_reshape_2d(ctx0, embeddings, hparams.projection_dim, n_patches_x * n_patches_y / 4);
         embeddings = ggml_get_rows(ctx0, embeddings, window_idx);
