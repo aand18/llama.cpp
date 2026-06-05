@@ -46,6 +46,7 @@ enum mtmd_pos_type {
 struct mtmd_image_tokens {
     uint32_t nx; // number of tokens in x direction
     uint32_t ny; // number of tokens in y direction
+    uint32_t nt = 1; // number of temporal pairs (1 for still image, bitmap->nt/2 for video)
     mtmd_pos_type pos = MTMD_POS_TYPE_NORMAL;
     uint32_t image_idx = 0; // 0-based position of this image among image chunks in the prompt(used by pos == MTMD_POS_TYPE_HUNYUANVL)
     uint32_t n_tokens() const {
@@ -53,8 +54,7 @@ struct mtmd_image_tokens {
             // [BOI] [row0 tokens + newline] ... [row(ny-1) tokens + newline] [EOI]
             return (nx + 1) * ny + 2;
         }
-        const uint32_t npairs = batch_f32.entries.size() / 2;
-        const uint32_t t = npairs > 0 ? npairs : 1;
+        const uint32_t t = nt > 0 ? nt : 1;
         return nx * ny * t;
     }
     clip_image_f32_batch batch_f32; // preprocessed image patches
@@ -64,6 +64,7 @@ struct mtmd_image_tokens {
         return mtmd_image_tokens{
             nx,
             ny,
+            nt,
             pos,
             image_idx,
             batch_f32.clone(),
@@ -1034,6 +1035,7 @@ struct mtmd_tokenizer {
         } else {
             GGML_ASSERT(false && "not supported");
         }
+        image_tokens->nt = n_frames / 2; // number of temporal pairs
         image_tokens->batch_f32 = std::move(all_frames);
         image_tokens->id = bitmap->id; // optional
 
@@ -1484,9 +1486,14 @@ mtmd_decoder_pos mtmd_image_tokens_get_decoder_pos(const mtmd_image_tokens * ima
     switch (image_tokens->pos) {
         case MTMD_POS_TYPE_MROPE:
             {
-                pos.t = pos_0;
+                // For still image (nt=1): pos.t = pos_0 (constant), pos.x/y = pos_0 + within-image coords
+                // For video (nt>1): pos.t advances per temporal pair (pair_idx = i / (nx*ny))
+                //                   pos.x = pos_0 + within-pair W (i % nx)
+                //                   pos.y = pos_0 + within-pair H ((i / nx) % ny)
+                const uint32_t n_per_pair = image_tokens->nx * image_tokens->ny;
+                pos.t = pos_0 + (n_per_pair > 0 ? (uint32_t)(i / n_per_pair) : 0);
                 pos.x = pos_0 + (i % image_tokens->nx);
-                pos.y = pos_0 + (i / image_tokens->nx);
+                pos.y = pos_0 + ((i / image_tokens->nx) % image_tokens->ny);
                 pos.z = 0; // unused for now
             } break;
         case MTMD_POS_TYPE_NORMAL:
@@ -1541,7 +1548,10 @@ const char * mtmd_image_tokens_get_id(const mtmd_image_tokens * image_tokens) {
 llama_pos mtmd_image_tokens_get_n_pos(const mtmd_image_tokens * image_tokens) {
     switch (image_tokens->pos) {
         case MTMD_POS_TYPE_MROPE:
-            return std::max(image_tokens->nx, image_tokens->ny);
+            // position extent = max single-axis range (T advances per pair, H/W within-pair)
+            return std::max({(llama_pos)image_tokens->nx,
+                             (llama_pos)image_tokens->ny,
+                             (llama_pos)image_tokens->nt});
         case MTMD_POS_TYPE_NORMAL:
             return image_tokens->n_tokens();
         case MTMD_POS_TYPE_HUNYUANVL:
