@@ -53,6 +53,20 @@ printf '/video C:\path\to\test.mp4\nDescribe it.\n/quit\n' | `
   <same binary> --video-fps 1.0 --video-max-frames 2
 ```
 
+**Context size for video:** `-c` must accommodate total image tokens. Each frame
+pair uses 50-2000 tokens depending on resolution. For a 5s 1920×1080 video at
+fps=4 (up to 20 frames = 10 pairs), `-c 32768` is the minimum. For low-res test
+video (≤480p) at fps≤2.5 with ≤3 frames, `-c 4096` is fine.
+
+**Test (multi-pair video, needs larger `-c`):**
+```powershell
+printf '/video C:\path\to\test.mp4\nDescribe it.\n/quit\n' | `
+  ./build/bin/Release/llama-mtmd-cli.exe `
+    -m "...Qwen3.5-2B-Q4_K_M.gguf" --mmproj "...mmproj-F32.gguf" `
+    -ngl 99 -c 32768 -b 4096 -ub 1024 `
+    --video-fps 4.0 --video-max-frames 20
+```
+
 **Test (Qwen3.6-27B IQ4_XS, GPU):** swap in `Qwen3.6-27B-IQ4_XS.gguf` + `mmproj-F16.gguf`; needs ~16 GB VRAM.
 
 **Known limit:** `qwen2vl.cpp:25` rejects `nt>2`. Use `--video-max-frames 2`. See design doc for follow-up plan.
