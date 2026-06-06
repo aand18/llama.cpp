@@ -13,6 +13,7 @@
 
 #include <algorithm>
 #include <cinttypes>
+#include <cmath>
 #include <string>
 #include <vector>
 
@@ -541,6 +542,51 @@ mtmd_bitmap * mtmd_helper_bitmap_init_from_file(mtmd_context * ctx, const char *
 // video extraction helpers (ffmpeg/ffprobe subprocess)
 //
 
+static int round_by_factor(int number, int factor) {
+    return (int) std::llround((double) number / (double) factor) * factor;
+}
+
+static int floor_by_factor(int number, int factor) {
+    int q = number / factor;
+    if (number < 0 && number % factor != 0) {
+        q -= 1;
+    }
+    return q * factor;
+}
+
+static int ceil_by_factor(int number, int factor) {
+    int q = number / factor;
+    if (number > 0 && number % factor != 0) {
+        q += 1;
+    } else if (number < 0 && number % factor != 0) {
+        q -= 1;
+    }
+    return q * factor;
+}
+
+void mtmd_helper_smart_resize(int32_t height, int32_t width, int32_t factor,
+                              int32_t min_pixels, int32_t max_pixels,
+                              int32_t * out_height, int32_t * out_width) {
+    const int h = (int) height;
+    const int w = (int) width;
+    const int f = (int) factor;
+    const int mn = (int) min_pixels;
+    const int mx = (int) max_pixels;
+    int h_bar = std::max(f, round_by_factor(h, f));
+    int w_bar = std::max(f, round_by_factor(w, f));
+    if (h_bar * w_bar > mx) {
+        const double beta = std::sqrt((double) h * (double) w / (double) mx);
+        h_bar = std::max(f, floor_by_factor((int) ((double) h / beta), f));
+        w_bar = std::max(f, floor_by_factor((int) ((double) w / beta), f));
+    } else if (h_bar * w_bar < mn) {
+        const double beta = std::sqrt((double) mn / ((double) h * (double) w));
+        h_bar = ceil_by_factor((int) ((double) h * beta), f);
+        w_bar = ceil_by_factor((int) ((double) w * beta), f);
+    }
+    *out_height = (int32_t) h_bar;
+    *out_width  = (int32_t) w_bar;
+}
+
 static int run_command_capture(const char * cmd, std::string & out) {
     out.clear();
 #if defined(_WIN32)
@@ -584,6 +630,42 @@ static int video_probe_dimensions(const char * fname, uint32_t & nx, uint32_t & 
     return 0;
 }
 
+static int video_probe_duration(const char * fname, double & duration_sec) {
+    std::string cmd = std::string("ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 \"") + fname + "\"";
+    std::string out;
+    if (run_command_capture(cmd.c_str(), out) != 0) {
+        LOG_ERR("%s: ffprobe failed for %s\n", __func__, fname);
+        return -1;
+    }
+    double d = 0.0;
+    if (std::sscanf(out.c_str(), "%lf", &d) != 1 || d <= 0.0) {
+        LOG_ERR("%s: failed to parse duration: '%s'\n", __func__, out.c_str());
+        return -1;
+    }
+    duration_sec = d;
+    return 0;
+}
+
+namespace mtmd_video_budget {
+    constexpr int VIDEO_MIN_TOKEN_NUM = 128;
+    constexpr int VIDEO_MAX_TOKEN_NUM = 768;
+    constexpr int FRAME_FACTOR        = 2;
+    constexpr int MODEL_SEQ_LEN       = 128000;
+    constexpr int IMAGE_FACTOR_BASE   = 28;
+    constexpr int MIN_PIXELS = VIDEO_MIN_TOKEN_NUM * IMAGE_FACTOR_BASE * IMAGE_FACTOR_BASE;
+    constexpr int MAX_PIXELS = VIDEO_MAX_TOKEN_NUM * IMAGE_FACTOR_BASE * IMAGE_FACTOR_BASE;
+    constexpr int TOTAL_PIXELS = MODEL_SEQ_LEN * IMAGE_FACTOR_BASE * IMAGE_FACTOR_BASE;
+}
+
+static int compute_per_frame_max(uint32_t nframes) {
+    using namespace mtmd_video_budget;
+    if (nframes < 2) {
+        nframes = 2;
+    }
+    int upper = std::min(MAX_PIXELS, (int) ((long long) TOTAL_PIXELS * FRAME_FACTOR / nframes));
+    return std::max(upper, (int) (MIN_PIXELS * 1.05));
+}
+
 static int video_extract_frames(const char * fname, float fps, int max_frames,
                                  uint32_t & nx, uint32_t & ny, uint32_t & nt,
                                  std::vector<unsigned char> & data) {
@@ -591,13 +673,56 @@ static int video_extract_frames(const char * fname, float fps, int max_frames,
         return -1;
     }
 
-    std::string cmd = std::string("ffmpeg -hide_banner -loglevel error -i \"") + fname + "\" -vf \"fps=" + std::to_string(fps) + ",format=rgb24\" -f rawvideo";
+    double duration_sec = 0.0;
+    if (video_probe_duration(fname, duration_sec) != 0) {
+        return -1;
+    }
+
+    int64_t total_frames = (int64_t) std::ceil(duration_sec * (double) fps);
+    if (max_frames > 0) {
+        total_frames = std::min(total_frames, (int64_t) max_frames);
+    }
+    if (total_frames < 2) {
+        total_frames = 2;
+    }
+    uint32_t nframes_est = (uint32_t) total_frames;
+    if (nframes_est % 2 != 0) {
+        nframes_est -= 1;
+    }
+    if (nframes_est < 2) {
+        nframes_est = 2;
+    }
+
+    int per_frame_max = compute_per_frame_max(nframes_est);
+    int32_t target_h = (int32_t) ny;
+    int32_t target_w = (int32_t) nx;
+    mtmd_helper_smart_resize(target_h, target_w,
+                             mtmd_video_budget::IMAGE_FACTOR_BASE,
+                             (int32_t) (mtmd_video_budget::MIN_PIXELS * 1.05),
+                             per_frame_max,
+                             &target_h, &target_w);
+
+    const bool needs_scale = ((uint32_t) target_w != nx) || ((uint32_t) target_h != ny);
+
+    std::string vf_chain = "fps=" + std::to_string(fps) + ",format=rgb24";
+    if (needs_scale) {
+        vf_chain = "scale=" + std::to_string(target_w) + ":" + std::to_string(target_h) + "," + vf_chain;
+    }
+
+    std::string cmd = std::string("ffmpeg -hide_banner -loglevel error -i \"") + fname + "\" -vf \"" + vf_chain + "\" -f rawvideo";
     if (max_frames > 0) {
         cmd += " -frames:v " + std::to_string(max_frames);
     }
     cmd += " -";
 
+    LOG_INF("%s: budget nframes=%u per_frame_max=%d target=%dx%d (src %ux%u, duration=%.2fs)\n",
+            __func__, nframes_est, per_frame_max, target_w, target_h, nx, ny, duration_sec);
     LOG_INF("%s: running: %s\n", __func__, cmd.c_str());
+
+    if (needs_scale) {
+        nx = (uint32_t) target_w;
+        ny = (uint32_t) target_h;
+    }
 
     data.clear();
 #if defined(_WIN32)

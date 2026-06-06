@@ -278,6 +278,10 @@ target_compile_features(test-mtmd-encoder-seq PRIVATE cxx_std_17)
 add_executable(test-mtmd-positions test-mtmd-positions.cpp)
 target_link_libraries(test-mtmd-positions PRIVATE mtmd llama)
 target_compile_features(test-mtmd-positions PRIVATE cxx_std_17)
+add_executable(test-smart-resize test-smart-resize.cpp)
+target_link_libraries(test-smart-resize PRIVATE mtmd)
+target_compile_features(test-smart-resize PRIVATE cxx_std_17)
+llama_test(test-smart-resize)
 
 # GGUF model data fetcher library for tests that need real model metadata
 # Only compile when cpp-httplib has SSL support (CPPHTTPLIB_OPENSSL_SUPPORT)

@@ -98,6 +98,13 @@ MTMD_API int32_t mtmd_helper_decode_image_chunk(mtmd_context * ctx,
                                                 int32_t n_batch,
                                                 llama_pos * new_n_past);
 
+// qwen-vl-utils smart_resize: rounds h/w to nearest multiple of 'factor' while
+// keeping h*w within [min_pixels, max_pixels] and preserving aspect ratio.
+// see: qwen_vl_utils/vision_process.py::smart_resize
+MTMD_API void mtmd_helper_smart_resize(int32_t height, int32_t width, int32_t factor,
+                                       int32_t min_pixels, int32_t max_pixels,
+                                       int32_t * out_height, int32_t * out_width);
+
 #ifdef __cplusplus
 } // extern "C"
 #endif
