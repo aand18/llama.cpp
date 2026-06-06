@@ -281,7 +281,8 @@ MTMD_API std::map<ggml_backend_dev_t, size_t> mtmd_get_memory_usage(
     const char * mmproj_fname,
     struct mtmd_context_params ctx_params);
 
-// test helper: encode a bitmap and return the vision encoder output (last hidden state, flattened)
+// test helper: bit-identical encoder output for the qwen-vl-utils pipeline
+// (per-pair M-RoPE + smart_resize). Used by tests/test-mtmd-encoder-seq.
 MTMD_API int mtmd_test_encode_bitmap(mtmd_context * ctx, const mtmd_bitmap * bitmap, std::vector<float> & out);
 #endif
 

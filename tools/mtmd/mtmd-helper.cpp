@@ -772,8 +772,6 @@ static int video_extract_frames(const char * fname, float fps, int min_frames, i
     }
     nt = (uint32_t) (data.size() / frame_size);
     if (nt % 2 != 0) {
-        // Align with qwen-vl-utils FRAME_FACTOR=2 and the qwen2vl.cpp nt<=2 limit
-        // by dropping the trailing frame when the count is odd.
         nt -= 1;
         data.resize((size_t) nt * frame_size);
         LOG_WRN("%s: odd frame count, dropped last frame to align to FRAME_FACTOR=2 (nt=%u)\n", __func__, nt);
