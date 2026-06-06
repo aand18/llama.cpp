@@ -34,9 +34,9 @@ Output goes to `tools/ui/dist/`. The CMake provisioning script picks it up autom
 
 ## mtmd Video Support
 
-Port of [upstream PR #21858](https://github.com/ggml-org/llama.cpp/pull/21858) (mtmd seq-of-images) plus an ffmpeg-backed `--video` flag in `llama-mtmd-cli`. See [`docs/mtmd-video.md`](docs/mtmd-video.md) for design rationale, port vs. fix breakdown, and PR-review prep.
+Port of [upstream PR #21858](https://github.com/ggml-org/llama.cpp/pull/21858) (mtmd seq-of-images) plus an ffmpeg-backed `--video` flag in `llama-mtmd-cli`, with follow-on work that **removes the original `nt<=2` cap** via pair-chunking in the Qwen-VL encoder, M-RoPE T-axis for video frames, and a per-frame pixel budget matching `qwen-vl-utils.fetch_video()`. See [`docs/mtmd-video.md`](docs/mtmd-video.md) for design rationale, port vs. fix breakdown, and PR-review prep.
 
-**Files touched** (16): `tools/mtmd/{clip.cpp,clip.h,clip-graph.h,clip-impl.h,mtmd.cpp,mtmd.h,mtmd-cli.cpp,mtmd-helper.cpp,mtmd-helper.h,models/{models.h,qwen2vl.cpp,qwen3vl.cpp}}`, `common/{arg.cpp,common.h}`, `tests/{test-arg-parser.cpp,test-mtmd-c-api.c}`.
+**Files touched**: `tools/mtmd/{clip.cpp,clip.h,clip-graph.h,clip-impl.h,mtmd.cpp,mtmd.h,mtmd-cli.cpp,mtmd-helper.cpp,mtmd-helper.h,models/{models.h,qwen2vl.cpp,qwen3vl.cpp}}`, `common/{arg.cpp,common.h}`, `tests/{CMakeLists.txt,test-arg-parser.cpp,test-mtmd-c-api.c,test-mtmd-encoder-seq.cpp,test-mtmd-positions.cpp,test-smart-resize.cpp}`, `tests/testdata/encoder-nt{2,4,8,64}-qwen2vl.bin`, `docs/mtmd-video.md`.
 
 **Build** (CUDA required for 27B; CPU is ~340× slower):
 ```powershell
@@ -50,8 +50,19 @@ printf '/image C:\path\to\test.jpg\nDescribe it.\n/quit\n' | `
     -m "...Qwen3.5-2B-Q4_K_M.gguf" --mmproj "...mmproj-F32.gguf" `
     -ngl 99 -c 4096 -b 1024 -ub 512
 printf '/video C:\path\to\test.mp4\nDescribe it.\n/quit\n' | `
-  <same binary> --video-fps 1.0 --video-max-frames 2
+  <same binary>   # defaults: --video-fps 2.0, --video-min-frames 4, --video-max-frames 768
 ```
+
+**Video flags** (defaults match `qwen-vl-utils`):
+
+| Flag | Default | Purpose |
+|------|---------|---------|
+| `--video-fps` | 2.0 | Sampling rate |
+| `--video-min-frames` | 4 | Floor on extracted frames; short videos are upsampled |
+| `--video-max-frames` | 768 | Cap on extracted frames; `0` = no cap |
+| `--video-min-tokens` | 128 | Per-frame min token count |
+| `--video-max-tokens` | 768 | Per-frame max token count |
+| `--video-total-pixels` | 19,267,584 | Total pixel budget for the whole video |
 
 **Context size for video:** `-c` must accommodate total image tokens. Each frame
 pair uses 50-2000 tokens depending on resolution. For a 5s 1920×1080 video at
@@ -69,7 +80,7 @@ printf '/video C:\path\to\test.mp4\nDescribe it.\n/quit\n' | `
 
 **Test (Qwen3.6-27B IQ4_XS, GPU):** swap in `Qwen3.6-27B-IQ4_XS.gguf` + `mmproj-F16.gguf`; needs ~16 GB VRAM.
 
-**Known limit:** `qwen2vl.cpp:25` rejects `nt>2`. Use `--video-max-frames 2`. See design doc for follow-up plan.
+**Encoder constraint:** vision encoder requires even frame count (`temporal_patch_size=2`); odd `nt` is rounded down with a `LOG_WRN`. No hard cap on `nt` (any even count is supported via pair-chunking). Window attention (`n_wa_pattern > 0`) is not extended to video. See [`docs/mtmd-video.md`](docs/mtmd-video.md) for the encoder design and follow-up plan.
 
 **Tools needed on Windows PATH:** `ffmpeg`, `ffprobe` (chocolatey at `C:\ProgramData\chocolatey\bin\`).
 
