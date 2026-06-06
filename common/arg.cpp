@@ -2235,7 +2235,7 @@ common_params_context common_params_parser_init(common_params & params, llama_ex
     add_opt(common_arg(
         {"--video-fps"}, "F",
         string_format(
-            "frames per second to sample from video (default: %.1f)\n",
+            "frames per second to sample from video (default: %.1f); each pair uses 50-2000 tokens — increase -c for high-res/long videos\n",
             (double)params.video_fps),
         [](common_params & params, const std::string & value) {
             params.video_fps = std::stof(value);
