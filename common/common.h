@@ -576,7 +576,8 @@ struct common_params {
     int image_max_tokens = -1;
     std::vector<std::string> video; // path to video file(s) — for video input via mtmd
     float video_fps = 2.0f;
-    int   video_max_frames = 64;
+    int   video_min_frames = 4;                         // qwen-vl-utils FPS_MIN_FRAMES
+    int   video_max_frames = 768;                       // qwen-vl-utils FPS_MAX_FRAMES
     int   video_min_tokens   = 128;                  // qwen-vl-utils VIDEO_MIN_TOKEN_NUM
     int   video_max_tokens   = 768;                  // qwen-vl-utils VIDEO_MAX_TOKEN_NUM
     int   video_total_pixels = 24576 * 28 * 28;      // qwen-vl-utils VIDEO_TOTAL_PIXELS = 19,267,584

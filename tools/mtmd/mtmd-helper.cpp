@@ -674,7 +674,7 @@ static int compute_per_frame_max(uint32_t nframes, const budget_params & bp) {
     return std::max(upper, (int) (min_pixels * 1.05));
 }
 
-static int video_extract_frames(const char * fname, float fps, int max_frames,
+static int video_extract_frames(const char * fname, float fps, int min_frames, int max_frames,
                                  const budget_params & bp,
                                  uint32_t & nx, uint32_t & ny, uint32_t & nt,
                                  std::vector<unsigned char> & data) {
@@ -690,6 +690,10 @@ static int video_extract_frames(const char * fname, float fps, int max_frames,
     int64_t total_frames = (int64_t) std::ceil(duration_sec * (double) fps);
     if (max_frames > 0) {
         total_frames = std::min(total_frames, (int64_t) max_frames);
+    }
+    if (min_frames > 0 && total_frames < min_frames) {
+        total_frames = min_frames;
+        fps = (float) total_frames / (float) duration_sec;
     }
     if (total_frames < 2) {
         total_frames = 2;
@@ -720,9 +724,7 @@ static int video_extract_frames(const char * fname, float fps, int max_frames,
     }
 
     std::string cmd = std::string("ffmpeg -hide_banner -loglevel error -i \"") + fname + "\" -vf \"" + vf_chain + "\" -f rawvideo";
-    if (max_frames > 0) {
-        cmd += " -frames:v " + std::to_string(max_frames);
-    }
+    cmd += " -frames:v " + std::to_string(total_frames);
     cmd += " -";
 
     LOG_INF("%s: budget min_tokens=%d max_tokens=%d total_pixels=%d nframes=%u per_frame_max=%d target=%dx%d (src %ux%u, duration=%.2fs)\n",
@@ -780,7 +782,7 @@ static int video_extract_frames(const char * fname, float fps, int max_frames,
 }
 
 mtmd_bitmap * mtmd_helper_bitmap_init_from_video(mtmd_context * ctx, const char * fname,
-                                                    float fps, int max_frames,
+                                                    float fps, int min_frames, int max_frames,
                                                     int min_tokens, int max_tokens, int total_pixels) {
     if (!ctx) {
         LOG_ERR("%s: ctx is null\n", __func__);
@@ -803,7 +805,7 @@ mtmd_bitmap * mtmd_helper_bitmap_init_from_video(mtmd_context * ctx, const char 
 
     uint32_t nx = 0, ny = 0, nt = 0;
     std::vector<unsigned char> data;
-    if (video_extract_frames(fname, fps, max_frames, bp, nx, ny, nt, data) != 0) {
+    if (video_extract_frames(fname, fps, min_frames, max_frames, bp, nx, ny, nt, data) != 0) {
         return nullptr;
     }
 

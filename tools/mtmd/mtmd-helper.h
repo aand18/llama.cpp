@@ -34,14 +34,15 @@ MTMD_API mtmd_bitmap * mtmd_helper_bitmap_init_from_file(mtmd_context * ctx, con
 // helper function to construct a mtmd_bitmap from a video file
 // frames are extracted using ffmpeg subprocess (must be on PATH)
 // fps: target sampling rate (e.g., 2.0 = extract 2 frames per second)
-// max_frames: cap on extracted frames (e.g., 64); 0 = no cap
+// min_frames: floor on extracted frames (e.g., 4); short videos are upsampled to this
+// max_frames: cap on extracted frames (e.g., 768); 0 = no cap
 // min_tokens/max_tokens: per-frame token budget (qwen-vl-utils VIDEO_{MIN,MAX}_TOKEN_NUM)
 // total_pixels: total pixel budget for the whole video (qwen-vl-utils VIDEO_TOTAL_PIXELS)
 // frames are paired sequentially; if odd count, last frame is dropped
 // returns nullptr on failure
 // this function is thread-safe
 MTMD_API mtmd_bitmap * mtmd_helper_bitmap_init_from_video(mtmd_context * ctx, const char * fname,
-                                                           float fps, int max_frames,
+                                                           float fps, int min_frames, int max_frames,
                                                            int min_tokens, int max_tokens, int total_pixels);
 
 // helper function to construct a mtmd_bitmap from a buffer containing a file

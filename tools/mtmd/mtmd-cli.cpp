@@ -175,10 +175,10 @@ struct mtmd_cli_context {
         return true;
     }
 
-    bool load_video(const std::string & fname, float fps, int max_frames,
+    bool load_video(const std::string & fname, float fps, int min_frames, int max_frames,
                     int min_tokens, int max_tokens, int total_pixels) {
         mtmd::bitmap bmp(mtmd_helper_bitmap_init_from_video(
-            ctx_vision.get(), fname.c_str(), fps, max_frames,
+            ctx_vision.get(), fname.c_str(), fps, min_frames, max_frames,
             min_tokens, max_tokens, total_pixels));
         if (!bmp.ptr) {
             return false;
@@ -372,7 +372,7 @@ int main(int argc, char ** argv) {
             }
         }
         for (const auto & video : params.video) {
-            if (!ctx.load_video(video, params.video_fps, params.video_max_frames,
+            if (!ctx.load_video(video, params.video_fps, params.video_min_frames, params.video_max_frames,
                                 params.video_min_tokens, params.video_max_tokens, params.video_total_pixels)) {
                 return 1; // error is already printed by libmtmd
             }
@@ -435,7 +435,7 @@ int main(int argc, char ** argv) {
                 }
                 std::string media_path = line.substr(7);
                 bool ok = is_video
-                    ? ctx.load_video(media_path, params.video_fps, params.video_max_frames,
+                    ? ctx.load_video(media_path, params.video_fps, params.video_min_frames, params.video_max_frames,
                                      params.video_min_tokens, params.video_max_tokens, params.video_total_pixels)
                     : ctx.load_media(media_path);
                 if (ok) {

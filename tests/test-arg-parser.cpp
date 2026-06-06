@@ -144,11 +144,12 @@ int main(void) {
     // mtmd video args
     {
         common_params vparams;
-        argv = {"binary_name", "-m", "model.gguf", "--video", "file.mp4", "--video-fps", "1.5", "--video-max-frames", "32"};
+        argv = {"binary_name", "-m", "model.gguf", "--video", "file.mp4", "--video-fps", "1.5", "--video-min-frames", "8", "--video-max-frames", "32"};
         assert(true == common_params_parse(argv.size(), list_str_to_char(argv).data(), vparams, LLAMA_EXAMPLE_MTMD));
         assert(vparams.video.size() == 1);
         assert(vparams.video[0] == "file.mp4");
         assert(vparams.video_fps == 1.5f);
+        assert(vparams.video_min_frames == 8);
         assert(vparams.video_max_frames == 32);
     }
 
