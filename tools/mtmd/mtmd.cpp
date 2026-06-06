@@ -1026,33 +1026,43 @@ struct mtmd_tokenizer {
             all_frames.entries.push_back(std::move(frame_batch.entries[0]));
         }
 
-        mtmd_image_tokens_ptr image_tokens(new mtmd_image_tokens);
-        if (mtmd_decode_use_mrope(ctx)) {
-            // for Qwen2VL, we need this information for M-RoPE decoding positions
-            image_tokens->nx = clip_n_output_tokens_x(ctx->ctx_v, all_frames.entries[0].get());
-            image_tokens->ny = clip_n_output_tokens_y(ctx->ctx_v, all_frames.entries[0].get());
-            image_tokens->pos = MTMD_POS_TYPE_MROPE;
-        } else {
+        const uint32_t npairs = n_frames / 2;
+
+        if (!mtmd_decode_use_mrope(ctx)) {
             GGML_ASSERT(false && "not supported");
         }
-        image_tokens->nt = n_frames / 2; // number of temporal pairs
-        image_tokens->batch_f32 = std::move(all_frames);
-        image_tokens->id = bitmap->id; // optional
+        const uint32_t nx = clip_n_output_tokens_x(ctx->ctx_v, all_frames.entries[0].get());
+        const uint32_t ny = clip_n_output_tokens_y(ctx->ctx_v, all_frames.entries[0].get());
 
-        LOG_DBG("seq_image: nt=%u, nx=%u, ny=%u, n_tokens=%u\n",
-                bitmap->nt, image_tokens->nx, image_tokens->ny, image_tokens->n_tokens());
+        LOG_DBG("seq_image: nt=%u, npairs=%u, nx=%u, ny=%u\n",
+                bitmap->nt, npairs, nx, ny);
 
         if (!ctx->img_beg.empty()) {
             add_text(ctx->img_beg, true);
         }
 
-        mtmd_input_chunk chunk{
-            MTMD_INPUT_CHUNK_TYPE_IMAGE,
-            {}, // text tokens
-            std::move(image_tokens),
-            nullptr, // audio tokens
-        };
-        cur.entries.emplace_back(std::move(chunk));
+        for (uint32_t p = 0; p < npairs; p++) {
+            clip_image_f32_batch pair_batch;
+            pair_batch.is_seq = true;
+            pair_batch.entries.push_back(std::move(all_frames.entries[p * 2]));
+            pair_batch.entries.push_back(std::move(all_frames.entries[p * 2 + 1]));
+
+            mtmd_image_tokens_ptr image_tokens(new mtmd_image_tokens);
+            image_tokens->nx = nx;
+            image_tokens->ny = ny;
+            image_tokens->nt = 1; // single temporal pair per chunk
+            image_tokens->pos = MTMD_POS_TYPE_MROPE;
+            image_tokens->batch_f32 = std::move(pair_batch);
+            image_tokens->id = bitmap->id;
+
+            mtmd_input_chunk chunk{
+                MTMD_INPUT_CHUNK_TYPE_IMAGE,
+                {}, // text tokens
+                std::move(image_tokens),
+                nullptr, // audio tokens
+            };
+            cur.entries.emplace_back(std::move(chunk));
+        }
 
         if (!ctx->img_end.empty()) {
             add_text(ctx->img_end, true);
@@ -1644,26 +1654,26 @@ int mtmd_test_encode_bitmap(mtmd_context * ctx, const mtmd_bitmap * bitmap, std:
         mtmd_input_chunks_free(chunks);
         return 1;
     }
-    const mtmd_input_chunk * image_chunk = nullptr;
+    out.clear();
     for (size_t i = 0; i < mtmd_input_chunks_size(chunks); i++) {
         const mtmd_input_chunk * c = mtmd_input_chunks_get(chunks, i);
-        if (mtmd_input_chunk_get_type(c) == MTMD_INPUT_CHUNK_TYPE_IMAGE) {
-            image_chunk = c;
-            break;
+        if (mtmd_input_chunk_get_type(c) != MTMD_INPUT_CHUNK_TYPE_IMAGE) {
+            continue;
         }
+        rc = mtmd_encode_chunk(ctx, c);
+        if (rc != 0) {
+            LOG_ERR("%s: mtmd_encode_chunk failed (rc=%d)\n", __func__, rc);
+            mtmd_input_chunks_free(chunks);
+            return 1;
+        }
+        out.insert(out.end(), ctx->image_embd_v.begin(), ctx->image_embd_v.end());
     }
-    if (!image_chunk) {
-        LOG_ERR("%s: no image chunk found in tokenized output\n", __func__);
+    if (out.empty()) {
+        LOG_ERR("%s: no image chunks found in tokenized output\n", __func__);
         mtmd_input_chunks_free(chunks);
         return 1;
     }
-    rc = mtmd_encode_chunk(ctx, image_chunk);
     mtmd_input_chunks_free(chunks);
-    if (rc != 0) {
-        LOG_ERR("%s: mtmd_encode_chunk failed\n", __func__);
-        return 1;
-    }
-    out.assign(ctx->image_embd_v.begin(), ctx->image_embd_v.end());
     return 0;
 }
 
