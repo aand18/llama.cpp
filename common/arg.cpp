@@ -2251,6 +2251,33 @@ common_params_context common_params_parser_init(common_params & params, llama_ex
         }
     ).set_examples({LLAMA_EXAMPLE_MTMD}));
     add_opt(common_arg(
+        {"--video-min-tokens"}, "N",
+        string_format(
+            "per-frame minimum token count for video (default: %d, matches qwen-vl-utils VIDEO_MIN_TOKEN_NUM); floor for per-frame pixel budget\n",
+            params.video_min_tokens),
+        [](common_params & params, int value) {
+            params.video_min_tokens = value;
+        }
+    ).set_examples({LLAMA_EXAMPLE_MTMD}));
+    add_opt(common_arg(
+        {"--video-max-tokens"}, "N",
+        string_format(
+            "per-frame maximum token count for video (default: %d, matches qwen-vl-utils VIDEO_MAX_TOKEN_NUM); ceiling for per-frame pixel budget\n",
+            params.video_max_tokens),
+        [](common_params & params, int value) {
+            params.video_max_tokens = value;
+        }
+    ).set_examples({LLAMA_EXAMPLE_MTMD}));
+    add_opt(common_arg(
+        {"--video-total-pixels"}, "N",
+        string_format(
+            "total pixel budget for the whole video (default: %d, matches qwen-vl-utils VIDEO_TOTAL_PIXELS = 24576*28*28); per-frame max is total/nframes*FRAME_FACTOR\n",
+            params.video_total_pixels),
+        [](common_params & params, int value) {
+            params.video_total_pixels = value;
+        }
+    ).set_examples({LLAMA_EXAMPLE_MTMD}));
+    add_opt(common_arg(
         {"--image-min-tokens"}, "N",
         "minimum number of tokens each image can take, only used by vision models with dynamic resolution (default: read from model)",
         [](common_params & params, int value) {

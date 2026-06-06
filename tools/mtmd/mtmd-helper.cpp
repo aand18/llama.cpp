@@ -650,23 +650,32 @@ namespace mtmd_video_budget {
     constexpr int VIDEO_MIN_TOKEN_NUM = 128;
     constexpr int VIDEO_MAX_TOKEN_NUM = 768;
     constexpr int FRAME_FACTOR        = 2;
-    constexpr int MODEL_SEQ_LEN       = 128000;
+    constexpr int VIDEO_TOTAL_PIXELS  = 24576 * 28 * 28;
     constexpr int IMAGE_FACTOR_BASE   = 28;
     constexpr int MIN_PIXELS = VIDEO_MIN_TOKEN_NUM * IMAGE_FACTOR_BASE * IMAGE_FACTOR_BASE;
     constexpr int MAX_PIXELS = VIDEO_MAX_TOKEN_NUM * IMAGE_FACTOR_BASE * IMAGE_FACTOR_BASE;
-    constexpr int TOTAL_PIXELS = MODEL_SEQ_LEN * IMAGE_FACTOR_BASE * IMAGE_FACTOR_BASE;
 }
 
-static int compute_per_frame_max(uint32_t nframes) {
-    using namespace mtmd_video_budget;
+struct budget_params {
+    int min_tokens;
+    int max_tokens;
+    int total_pixels;
+    int frame_factor = mtmd_video_budget::FRAME_FACTOR;
+    int image_factor = mtmd_video_budget::IMAGE_FACTOR_BASE;
+};
+
+static int compute_per_frame_max(uint32_t nframes, const budget_params & bp) {
     if (nframes < 2) {
         nframes = 2;
     }
-    int upper = std::min(MAX_PIXELS, (int) ((long long) TOTAL_PIXELS * FRAME_FACTOR / nframes));
-    return std::max(upper, (int) (MIN_PIXELS * 1.05));
+    const int min_pixels = bp.min_tokens * bp.image_factor * bp.image_factor;
+    const int max_pixels = bp.max_tokens * bp.image_factor * bp.image_factor;
+    int upper = std::min(max_pixels, (int) ((long long) bp.total_pixels * bp.frame_factor / nframes));
+    return std::max(upper, (int) (min_pixels * 1.05));
 }
 
 static int video_extract_frames(const char * fname, float fps, int max_frames,
+                                 const budget_params & bp,
                                  uint32_t & nx, uint32_t & ny, uint32_t & nt,
                                  std::vector<unsigned char> & data) {
     if (video_probe_dimensions(fname, nx, ny) != 0) {
@@ -693,12 +702,13 @@ static int video_extract_frames(const char * fname, float fps, int max_frames,
         nframes_est = 2;
     }
 
-    int per_frame_max = compute_per_frame_max(nframes_est);
+    int per_frame_max = compute_per_frame_max(nframes_est, bp);
+    const int min_pixels = bp.min_tokens * bp.image_factor * bp.image_factor;
     int32_t target_h = (int32_t) ny;
     int32_t target_w = (int32_t) nx;
     mtmd_helper_smart_resize(target_h, target_w,
-                             mtmd_video_budget::IMAGE_FACTOR_BASE,
-                             (int32_t) (mtmd_video_budget::MIN_PIXELS * 1.05),
+                             bp.image_factor,
+                             (int32_t) (min_pixels * 1.05),
                              per_frame_max,
                              &target_h, &target_w);
 
@@ -715,8 +725,9 @@ static int video_extract_frames(const char * fname, float fps, int max_frames,
     }
     cmd += " -";
 
-    LOG_INF("%s: budget nframes=%u per_frame_max=%d target=%dx%d (src %ux%u, duration=%.2fs)\n",
-            __func__, nframes_est, per_frame_max, target_w, target_h, nx, ny, duration_sec);
+    LOG_INF("%s: budget min_tokens=%d max_tokens=%d total_pixels=%d nframes=%u per_frame_max=%d target=%dx%d (src %ux%u, duration=%.2fs)\n",
+            __func__, bp.min_tokens, bp.max_tokens, bp.total_pixels,
+            nframes_est, per_frame_max, target_w, target_h, nx, ny, duration_sec);
     LOG_INF("%s: running: %s\n", __func__, cmd.c_str());
 
     if (needs_scale) {
@@ -768,7 +779,9 @@ static int video_extract_frames(const char * fname, float fps, int max_frames,
     return 0;
 }
 
-mtmd_bitmap * mtmd_helper_bitmap_init_from_video(mtmd_context * ctx, const char * fname, float fps, int max_frames) {
+mtmd_bitmap * mtmd_helper_bitmap_init_from_video(mtmd_context * ctx, const char * fname,
+                                                    float fps, int max_frames,
+                                                    int min_tokens, int max_tokens, int total_pixels) {
     if (!ctx) {
         LOG_ERR("%s: ctx is null\n", __func__);
         return nullptr;
@@ -786,9 +799,11 @@ mtmd_bitmap * mtmd_helper_bitmap_init_from_video(mtmd_context * ctx, const char 
         return nullptr;
     }
 
+    const budget_params bp{min_tokens, max_tokens, total_pixels, mtmd_video_budget::FRAME_FACTOR, mtmd_video_budget::IMAGE_FACTOR_BASE};
+
     uint32_t nx = 0, ny = 0, nt = 0;
     std::vector<unsigned char> data;
-    if (video_extract_frames(fname, fps, max_frames, nx, ny, nt, data) != 0) {
+    if (video_extract_frames(fname, fps, max_frames, bp, nx, ny, nt, data) != 0) {
         return nullptr;
     }
 
