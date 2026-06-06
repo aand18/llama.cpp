@@ -128,4 +128,3 @@ struct clip_cap {
     bool has_audio;
 };
 struct clip_cap clip_get_cap(const char * fname);
-bool clip_has_whisper_encoder(const struct clip_ctx * ctx);
