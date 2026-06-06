@@ -43,13 +43,25 @@ Port of [upstream PR #21858](https://github.com/ggml-org/llama.cpp/pull/21858) (
 ./build-cuda.ps1   # explicit CUDA v13.1 root — MSVC has no 13.3 targets
 ```
 
+**Test corpus** (`C:\temp\qwen-test\`, not in git):
+
+| File | Duration | Resolution | Purpose |
+|------|----------|------------|---------|
+| `test.jpg` | — | — | still-image sanity |
+| `test1s.mp4` | 1s | 320×240 | minimal video smoke |
+| `test5s_240p.mp4` | 5s | 320×240 | low-res regression, fits `-c 4096` |
+| `test.mp4` | 5s | 1920×1080 | high-res stress, needs `-c 8192`+ |
+| `test30s.mp4` | 30s | 320×240 | long-video smoke |
+
+Regenerate the 240p fixture with `ffmpeg -f lavfi -i testsrc=duration=5:size=320x240:rate=30 -c:v libx264 -pix_fmt yuv420p C:\temp\qwen-test\test5s_240p.mp4`.
+
 **Test (Qwen3.5-2B Q4_K_M, CPU/GPU, fast sanity):**
 ```powershell
-printf '/image C:\path\to\test.jpg\nDescribe it.\n/quit\n' | `
+printf '/image C:\temp\qwen-test\test.jpg\nDescribe it.\n/quit\n' | `
   ./build/bin/Release/llama-mtmd-cli.exe `
     -m "...Qwen3.5-2B-Q4_K_M.gguf" --mmproj "...mmproj-F32.gguf" `
     -ngl 99 -c 4096 -b 1024 -ub 512
-printf '/video C:\path\to\test.mp4\nDescribe it.\n/quit\n' | `
+printf '/video C:\temp\qwen-test\test5s_240p.mp4\nDescribe it.\n/quit\n' | `
   <same binary>   # defaults: --video-fps 2.0, --video-min-frames 4, --video-max-frames 768
 ```
 
@@ -64,21 +76,24 @@ printf '/video C:\path\to\test.mp4\nDescribe it.\n/quit\n' | `
 | `--video-max-tokens` | 768 | Per-frame max token count |
 | `--video-total-pixels` | 19,267,584 | Total pixel budget for the whole video |
 
-**Context size for video:** `-c` must accommodate total image tokens. Each frame
-pair uses 50-2000 tokens depending on resolution. For a 5s 1920×1080 video at
-fps=4 (up to 20 frames = 10 pairs), `-c 32768` is the minimum. For low-res test
-video (≤480p) at fps≤2.5 with ≤3 frames, `-c 4096` is fine.
+**Context size for video:** `-c` must accommodate total image tokens plus the
+prompt and generation. Each frame pair uses ~120 tokens at 320×240 and ~576
+tokens at 1920×1080 with default flags. Empirically: `test5s_240p.mp4`
+(5 pairs × 120 = 600 image tokens) fits `-c 4096`; `test.mp4`
+(5 pairs × 576 = 2880 image tokens) needs `-c 8192` for the 27B model. For
+higher fps or longer videos, scale `-c` accordingly.
 
-**Test (multi-pair video, needs larger `-c`):**
+**Test (1080p, multi-pair, needs larger `-c`):**
 ```powershell
-printf '/video C:\path\to\test.mp4\nDescribe it.\n/quit\n' | `
+printf '/video C:\temp\qwen-test\test.mp4\nDescribe it.\n/quit\n' | `
   ./build/bin/Release/llama-mtmd-cli.exe `
     -m "...Qwen3.5-2B-Q4_K_M.gguf" --mmproj "...mmproj-F32.gguf" `
-    -ngl 99 -c 32768 -b 4096 -ub 1024 `
-    --video-fps 4.0 --video-max-frames 20
+    -ngl 99 -c 8192 -b 1024 -ub 1024
 ```
 
-**Test (Qwen3.6-27B IQ4_XS, GPU):** swap in `Qwen3.6-27B-IQ4_XS.gguf` + `mmproj-F16.gguf`; needs ~16 GB VRAM.
+**Test (Qwen3.6-27B IQ4_XS, GPU):** swap in `Qwen3.6-27B-IQ4_XS.gguf` +
+`mmproj-F16.gguf`; needs ~16 GB VRAM. Use `-c 4096` for `test5s_240p.mp4`
+(low-res regression check) or `-c 8192` for `test.mp4` (1080p).
 
 **Encoder constraint:** vision encoder requires even frame count (`temporal_patch_size=2`); odd `nt` is rounded down with a `LOG_WRN`. No hard cap on `nt` (any even count is supported via pair-chunking). Window attention (`n_wa_pattern > 0`) is not extended to video. See [`docs/mtmd-video.md`](docs/mtmd-video.md) for the encoder design and follow-up plan.
 
