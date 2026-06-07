@@ -283,6 +283,23 @@ target_link_libraries(test-smart-resize PRIVATE mtmd)
 target_compile_features(test-smart-resize PRIVATE cxx_std_17)
 llama_test(test-smart-resize)
 
+# mtmd encoder/position tests require a real model + mmproj, supplied via env vars
+# at CMake configure time: -DMTMD_TEST_MODEL=/path/to/model.gguf -DMTMD_TEST_MMPROJ=/path/to/mmproj.gguf
+if (NOT DEFINED MTMD_TEST_MODEL)
+    set(MTMD_TEST_MODEL "${PROJECT_SOURCE_DIR}/models/mtmd-test-model.gguf")
+endif()
+if (NOT DEFINED MTMD_TEST_MMPROJ)
+    set(MTMD_TEST_MMPROJ "${PROJECT_SOURCE_DIR}/models/mtmd-test-mmproj.gguf")
+endif()
+llama_test(test-mtmd-encoder-seq NAME test-mtmd-encoder-seq-nt2  LABEL "model" ARGS "${MTMD_TEST_MODEL}" "${MTMD_TEST_MMPROJ}" 2)
+llama_test(test-mtmd-encoder-seq NAME test-mtmd-encoder-seq-nt4  LABEL "model" ARGS "${MTMD_TEST_MODEL}" "${MTMD_TEST_MMPROJ}" 4)
+llama_test(test-mtmd-encoder-seq NAME test-mtmd-encoder-seq-nt8  LABEL "model" ARGS "${MTMD_TEST_MODEL}" "${MTMD_TEST_MMPROJ}" 8)
+llama_test(test-mtmd-encoder-seq NAME test-mtmd-encoder-seq-nt64 LABEL "model" ARGS "${MTMD_TEST_MODEL}" "${MTMD_TEST_MMPROJ}" 64)
+llama_test(test-mtmd-positions NAME test-mtmd-positions-nt2  LABEL "model" ARGS "${MTMD_TEST_MODEL}" "${MTMD_TEST_MMPROJ}" 2)
+llama_test(test-mtmd-positions NAME test-mtmd-positions-nt4  LABEL "model" ARGS "${MTMD_TEST_MODEL}" "${MTMD_TEST_MMPROJ}" 4)
+llama_test(test-mtmd-positions NAME test-mtmd-positions-nt8  LABEL "model" ARGS "${MTMD_TEST_MODEL}" "${MTMD_TEST_MMPROJ}" 8)
+llama_test(test-mtmd-positions NAME test-mtmd-positions-nt16 LABEL "model" ARGS "${MTMD_TEST_MODEL}" "${MTMD_TEST_MMPROJ}" 16)
+
 # GGUF model data fetcher library for tests that need real model metadata
 # Only compile when cpp-httplib has SSL support (CPPHTTPLIB_OPENSSL_SUPPORT)
 if (TARGET cpp-httplib)
