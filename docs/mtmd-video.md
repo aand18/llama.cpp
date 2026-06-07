@@ -228,12 +228,12 @@ GPU: RTX 4090, 24 GB VRAM. CPU comparison: 170 s/image vs 0.5 s/image on GPU.
 | Qwen3.5-2B | Q4_K_M | ✅ | ✅ | ✅ "A sunny day in a lush green park with tall trees, a wooden bench, and a white truck parked nearby." | ✅ | <2 s |
 | Qwen3.6-27B | IQ4_XS | ✅ | ✅ | ✅ "this is a beautiful park with lots of trees and plants in it and there is a road near the park and there are cars on the road." | (out of scope for this iteration; needs `-c 32768`) | ~20 s load + <2 s eval |
 
-Test video: 5 s sample mp4, 320×240, downloaded from `download.samplelib.com/mp4/sample-5s.mp4`. Default flags (`--video-fps 2.0 --video-max-frames 768`) extract 10 frames (5 s × 2 fps = 10, even, no padding).
+Test video: 5 s sample mp4, 320×240 (low-res `test5s_240p.mp4` fixture; the 5 s 1080p `test.mp4` is the high-res stress test and needs `-c 8192` on the 27B model). Default flags (`--video-fps 2.0 --video-max-frames 768`) extract 10 frames (5 s × 2 fps = 10, even, no padding).
 
 Reproduce (note: defaults are now sane, no need to pass `--video-fps` / `--video-max-frames`):
 
 ```powershell
-printf '/video C:\temp\qwen-test\test.mp4\nDescribe it.\n/quit\n' | `
+printf '/video C:\temp\qwen-test\test5s_240p.mp4\nDescribe it.\n/quit\n' | `
   ./build/bin/Release/llama-mtmd-cli.exe `
     -m "C:\Users\yoho\.cache\lm-studio\models\unsloth\Qwen3.6-27B-MTP-GGUF\Qwen3.6-27B-IQ4_XS.gguf" `
     --mmproj "C:\Users\yoho\.cache\lm-studio\models\unsloth\Qwen3.6-27B-MTP-GGUF\mmproj-F16.gguf" `
