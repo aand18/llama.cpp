@@ -771,11 +771,6 @@ static int video_extract_frames(const char * fname, float fps, int min_frames, i
         return -1;
     }
     nt = (uint32_t) (data.size() / frame_size);
-    if (nt % 2 != 0) {
-        nt -= 1;
-        data.resize((size_t) nt * frame_size);
-        LOG_WRN("%s: odd frame count, dropped last frame to align to FRAME_FACTOR=2 (nt=%u)\n", __func__, nt);
-    }
     return 0;
 }
 
