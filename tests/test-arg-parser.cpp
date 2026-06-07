@@ -152,6 +152,14 @@ int main(void) {
         assert(vparams.video_min_frames == 8);
         assert(vparams.video_max_frames == 32);
     }
+    {
+        common_params vparams;
+        argv = {"binary_name", "-m", "model.gguf", "--video", "file.mp4", "--video-min-tokens", "64", "--video-max-tokens", "512", "--video-total-pixels", "1000000"};
+        assert(true == common_params_parse(argv.size(), list_str_to_char(argv).data(), vparams, LLAMA_EXAMPLE_MTMD));
+        assert(vparams.video_min_tokens == 64);
+        assert(vparams.video_max_tokens == 512);
+        assert(vparams.video_total_pixels == 1000000);
+    }
 
 // skip this part on windows, because setenv is not supported
 #ifdef _WIN32
