@@ -53,8 +53,7 @@ struct mtmd_image_tokens {
             // [BOI] [row0 tokens + newline] ... [row(ny-1) tokens + newline] [EOI]
             return (nx + 1) * ny + 2;
         }
-        const uint32_t t = nt > 0 ? nt : 1;
-        return nx * ny * t;
+        return nx * ny;
     }
     clip_image_f32_batch batch_f32; // preprocessed image patches
     std::string id; // optional user-defined ID, useful for KV cache tracking
