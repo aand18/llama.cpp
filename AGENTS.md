@@ -1,3 +1,43 @@
+<!-- ============================== -->
+<!-- DOWNSTREAM CUSTOMIZATIONS      -->
+<!-- All agent/config mods go here  -->
+<!-- End of downstream section       -->
+<!-- ============================== -->
+
+## Git Workflow
+
+This is a customization of llama.cpp — not an upstream PR. Keep feature branches rebased on `origin/master` to maintain a clean linear history and easy tracking of custom changes.
+
+- **Use `./rebase.ps1`** to rebase current branch on `origin/master` — logs to `rebase-history.txt`
+- **`git diff origin/master`** to isolate your customizations at any time
+
+## WSL / Windows Environment
+
+The agent runs in WSL but the project repository lives on the Windows host. Run git and build commands through `powershell.exe` (not native WSL tools) to avoid filesystem and line-ending issues.
+
+- **Git**: `powershell.exe -Command "cd 'WORKSPACE'; git <command>"`
+- **Rebase**: `powershell.exe -Command "cd 'REPO'; ./rebase.ps1"` — rebases on `origin/master`, logs to `rebase-history.txt`
+- **Build**: `powershell.exe -Command "cd 'REPO'; ./build.ps1"` — outputs to `%TEMP%\llama.cpp\<normalized-branch>\<short_hash>\` with all DLLs/EXEs + `version.txt`
+- **Latest EXEs**: Batch wrappers in `%TEMP%\llama.cpp\<normalized-branch>\*.bat` (e.g. `llama-server.bat`) — just run them, no PATH or cd needed
+- **Branch normalization**: `feat/webui-slot-inspector` → `feat-webui-slot-inspector` (slashes replaced with dashes)
+- **CUDA override**: `$env:CUDA_PATH = $env:CUDA_PATH_V13_3; ./build.ps1`
+
+## UI Build
+
+The build script disables the embedded UI (`-DLLAMA_BUILD_UI=OFF -DLLAMA_USE_PREBUILT_UI=OFF`).
+
+**WSL / Windows**: Use `bash scripts/build-webui-wsl.sh` — syncs to WSL ext4 for fast IO, builds, copies `dist/` back to Windows.
+
+**Native WSL build** (if repo is on ext4):
+
+```bash
+cd tools/ui && npm install && npm run build
+```
+
+Output goes to `tools/ui/dist/`. The CMake provisioning script picks it up automatically — no manual copy needed.
+
+---
+
 # Instructions for llama.cpp
 
 > [!IMPORTANT]
