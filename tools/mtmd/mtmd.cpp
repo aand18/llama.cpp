@@ -26,11 +26,10 @@
 
 // represents raw image data, layout is RGBRGBRGB...
 // length of data must be nx * ny * 3
-// for sequence of images (i.e. video): data is nt sequential RGB frames, each nx * ny * 3 bytes
 struct mtmd_bitmap {
     uint32_t nx;
     uint32_t ny;
-    uint32_t nt = 1; // 1 for single images, >= 2 (even) for sequence
+    uint32_t nt = 1;
     std::vector<unsigned char> data;
     std::string id; // optional user-defined id, for ex: can be set to image hash, useful for KV cache tracking
     bool is_audio = false; // true if the bitmap is audio
@@ -46,7 +45,7 @@ enum mtmd_pos_type {
 struct mtmd_image_tokens {
     uint32_t nx; // number of tokens in x direction
     uint32_t ny; // number of tokens in y direction
-    uint32_t nt = 1; // number of temporal pairs (1 for still image, bitmap->nt/2 for video)
+    uint32_t nt = 1;
     mtmd_pos_type pos = MTMD_POS_TYPE_NORMAL;
     uint32_t image_idx = 0; // 0-based position of this image among image chunks in the prompt(used by pos == MTMD_POS_TYPE_HUNYUANVL)
     uint32_t n_tokens() const {
@@ -992,7 +991,6 @@ struct mtmd_tokenizer {
     int32_t add_seq_image(const mtmd_bitmap * bitmap) {
         GGML_ASSERT(ctx->ctx_v);
         GGML_ASSERT(bitmap->nt > 1);
-        // TODO [QWEN_VIDEO]: we only support even frames (Qwen-VL style) for now
         GGML_ASSERT(bitmap->nt % 2 == 0);
         bool support_seq = clip_model_supports_seq_input(ctx->ctx_v);
         if (!support_seq) {
@@ -1003,11 +1001,10 @@ struct mtmd_tokenizer {
         const uint32_t n_frames = bitmap->nt;
         const size_t   frame_bytes = (size_t)bitmap->nx * bitmap->ny * 3;
 
-        // preprocess each frame individually
         clip_image_f32_batch all_frames;
         all_frames.is_seq = true;
-        all_frames.grid_x = 0; // currently, we don't support tiling for video input
-        all_frames.grid_y = 0; // currently, we don't support tiling for video input
+        all_frames.grid_x = 0;
+        all_frames.grid_y = 0;
 
         for (uint32_t f = 0; f < n_frames; f++) {
             clip_image_u8_ptr img_u8(clip_image_u8_init());
@@ -1050,7 +1047,7 @@ struct mtmd_tokenizer {
             mtmd_image_tokens_ptr image_tokens(new mtmd_image_tokens);
             image_tokens->nx = nx;
             image_tokens->ny = ny;
-            image_tokens->nt = 1; // single temporal pair per chunk
+            image_tokens->nt = 1;
             image_tokens->pos = MTMD_POS_TYPE_MROPE;
             image_tokens->batch_f32 = std::move(pair_batch);
             image_tokens->id = bitmap->id;
@@ -1285,11 +1282,8 @@ mtmd_bitmap * mtmd_bitmap_init_from_seq(uint32_t nx,
         return nullptr;
     }
     if (nt == 1) {
-        // if nt == 1, it's not really a sequence, we can treat it as a single image
         return mtmd_bitmap_init(nx, ny, data);
     }
-    // TODO [QWEN_VIDEO]: we only support Qwen-VL style for now, which requires even number of frames
-    // therefore, we duplicate the last frame if nt is odd, to avoid issues in video preprocessing
     bool is_odd = (nt % 2 == 1);
     uint32_t nt_out = is_odd ? nt + 1 : nt;
     size_t frame_size = (size_t)nx * ny * 3;
@@ -1300,10 +1294,6 @@ mtmd_bitmap * mtmd_bitmap_init_from_seq(uint32_t nx,
     size_t data_size = frame_size * nt_out;
     bitmap->data.resize(data_size);
     if (is_odd) {
-        // Copy all nt original frames, then duplicate the last one at
-        // position nt (which is nt_out - 1). The first memcpy reads nt
-        // frames in-bounds; the second reads 1 frame in-bounds. Avoids
-        // the one-past-end read of the previous implementation.
         std::memcpy(bitmap->data.data(), data, frame_size * nt);
         std::memcpy(bitmap->data.data() + nt * frame_size,
                     data + (nt - 1) * frame_size,
@@ -1496,10 +1486,6 @@ mtmd_decoder_pos mtmd_image_tokens_get_decoder_pos(const mtmd_image_tokens * ima
     switch (image_tokens->pos) {
         case MTMD_POS_TYPE_MROPE:
             {
-                // For still image (nt=1): pos.t = pos_0 (constant), pos.x/y = pos_0 + within-image coords
-                // For video (nt>1): pos.t advances per temporal pair (pair_idx = i / (nx*ny))
-                //                   pos.x = pos_0 + within-pair W (i % nx)
-                //                   pos.y = pos_0 + within-pair H ((i / nx) % ny)
                 const uint32_t n_per_pair = image_tokens->nx * image_tokens->ny;
                 pos.t = pos_0 + (n_per_pair > 0 ? (uint32_t)(i / n_per_pair) : 0);
                 pos.x = pos_0 + (i % image_tokens->nx);
@@ -1558,7 +1544,6 @@ const char * mtmd_image_tokens_get_id(const mtmd_image_tokens * image_tokens) {
 llama_pos mtmd_image_tokens_get_n_pos(const mtmd_image_tokens * image_tokens) {
     switch (image_tokens->pos) {
         case MTMD_POS_TYPE_MROPE:
-            // position extent = max single-axis range (T advances per pair, H/W within-pair)
             return std::max({(llama_pos)image_tokens->nx,
                              (llama_pos)image_tokens->ny,
                              (llama_pos)image_tokens->nt});
@@ -1831,7 +1816,6 @@ std::map<ggml_backend_dev_t, size_t> mtmd_get_memory_usage(const char * mmproj_f
 }
 
 // test helper: extract raw RGB frames from a video file via ffmpeg/ffprobe subprocess.
-// returns 0 on success, non-zero on failure. on success, fills out_nx/out_ny/out_nt.
 int mtmd_test_video_extract(const char * fname, float fps, int max_frames,
                               uint32_t * out_nx, uint32_t * out_ny, uint32_t * out_nt) {
     if (!fname || !out_nx || !out_ny || !out_nt) {
@@ -1843,7 +1827,6 @@ int mtmd_test_video_extract(const char * fname, float fps, int max_frames,
         return 1;
     }
 
-    // probe dimensions via ffprobe
     std::string probe_cmd = std::string("ffprobe -v error -select_streams v:0 -show_entries stream=width,height -of csv=s=x:p=0 \"") + fname + "\"";
 #if defined(_WIN32)
     FILE * probe_pipe = _popen(probe_cmd.c_str(), "r");
@@ -1873,7 +1856,6 @@ int mtmd_test_video_extract(const char * fname, float fps, int max_frames,
     *out_nx = (uint32_t) w;
     *out_ny = (uint32_t) h;
 
-    // extract frames via ffmpeg
     std::string extract_cmd = std::string("ffmpeg -hide_banner -loglevel error -i \"") + fname + "\" -vf \"fps=" + std::to_string(fps) + ",format=rgb24\" -f rawvideo";
     if (max_frames > 0) {
         extract_cmd += " -frames:v " + std::to_string(max_frames);

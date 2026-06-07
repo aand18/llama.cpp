@@ -37,8 +37,7 @@ struct clip_graph {
     float kq_scale; // TODO: maybe move this to hparams
     const clip_flash_attn_type flash_attn_type;
 
-    // TODO [QWEN_VIDEO]: improve this in the future
-    int nt = 1; // number of temporal dim, to be used by Qwen-VL models
+    int nt = 1;
 
     ggml_context_ptr ctx0_ptr;
     ggml_context * ctx0;

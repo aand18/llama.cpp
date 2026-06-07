@@ -133,10 +133,6 @@ MTMD_API int mtmd_get_audio_sample_rate(const mtmd_context * ctx);
 // if bitmap is image:
 //     length of data must be nx * ny * 3
 //     the data is in RGBRGBRGB... format
-// if bitmap is sequence of images (i.e. video):
-//     nt is the number of frames
-//     length of data must be nx * ny * 3 * nt
-//     frames are sequential RGB, each nx * ny * 3 bytes
 // if bitmap is audio:
 //     length of data must be n_samples * sizeof(float)
 //     the data is in float format (PCM F32)
@@ -194,7 +190,7 @@ MTMD_API size_t       mtmd_image_tokens_get_n_tokens(const mtmd_image_tokens * i
 MTMD_API size_t       mtmd_image_tokens_get_nx      (const mtmd_image_tokens * image_tokens);
 MTMD_API size_t       mtmd_image_tokens_get_ny      (const mtmd_image_tokens * image_tokens);
 MTMD_API const char * mtmd_image_tokens_get_id      (const mtmd_image_tokens * image_tokens); // TODO: deprecate
-// number of temporal positions (equals to max(nx, ny) for M-RoPE; equals to n_tokens otherwise)
+// number of temporal positions (equals to max(t,h,w) for M-RoPE; equals to n_tokens otherwise)
 MTMD_API llama_pos    mtmd_image_tokens_get_n_pos   (const mtmd_image_tokens * image_tokens); // TODO: deprecate
 
 DEPRECATED(MTMD_API size_t mtmd_image_tokens_get_nx(const mtmd_image_tokens * image_tokens),

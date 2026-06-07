@@ -995,7 +995,6 @@ static ggml_cgraph * clip_image_build_graph(clip_ctx * ctx, const clip_image_f32
             GGML_ABORT("missing cgraph builder");
     }
 
-    // TODO [QWEN_VIDEO]: improve this in the future
     builder->nt = imgs.entries.size();
 
     return builder->build();
@@ -3455,8 +3454,6 @@ bool clip_image_batch_encode(clip_ctx * ctx, const int n_threads, const clip_ima
         // │     H │  channel = B
         // └─────┘ │
         //   ──────┘ x B
-
-        // IMPORTANT: [QWEN_VIDEO] the batch dim is currently used for temporal dim in Qwen-VL models
 
         for (size_t i = 0; i < imgs.entries.size(); i++) {
             const int nx = imgs.entries[i]->nx;

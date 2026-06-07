@@ -11,7 +11,6 @@ ggml_tensor * clip_graph_qwen2vl::build_inp_with_temporal_merge() {
     const size_t nb2 = nb1 * img.ny;
 
     if (nt == 1) {
-        // still image input
         return ggml_add(ctx0,
             ggml_conv_2d(ctx0, model.patch_embeddings_0, inp_raw, patch_size, patch_size, 0, 0, 1, 1),
             ggml_conv_2d(ctx0, model.patch_embeddings_1, inp_raw, patch_size, patch_size, 0, 0, 1, 1));
