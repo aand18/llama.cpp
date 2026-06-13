@@ -11,6 +11,7 @@ Set-Location $PSScriptRoot
 # Fix git for worktree: .git file has WSL path Windows git can't resolve
 # Main repo is two levels up: .worktrees/branch-name -> main repo root
 $MAIN_REPO = (Get-Item $PSScriptRoot).Parent.Parent.FullName
+if (-not (Test-Path (Join-Path $MAIN_REPO ".git"))) { Write-Error "Not in a git worktree"; exit 1 }
 $env:GIT_DIR = Join-Path (Join-Path $MAIN_REPO ".git\worktrees") (Split-Path $PSScriptRoot -Leaf)
 
 # Get branch and commit info
