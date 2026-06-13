@@ -14,6 +14,8 @@ The branches it merges in are controlled by the `$Branches` array at the top of 
 
 The script includes a preflight check: if `master` has diverged from `upstream/master` (you have local commits upstream doesn't, AND upstream has commits you don't), it refuses to run with a clear error and a recovery recipe. This protects you from silently rewriting master.
 
+**Worktree-safe**: Uses `git update-ref` instead of `git checkout` to update `master`, so it works from opencode-managed worktrees that pin a branch.
+
 ### Prune-Worktrees.ps1
 
 Archives stale `opencode/*` worktree branches left over from agent sessions. **Never just deletes** — every branch goes through a safe pipeline:

@@ -16,6 +16,9 @@ Configure which branches get merged in by editing the $Branches array below.
 If master has diverged from upstream/master (local commits not on upstream),
 the script refuses to run with a clear error and a recovery recipe. This
 protects you from accidental master rewrites when upstream has new commits.
+
+Worktree-safe: uses git update-ref instead of git checkout to update master,
+so it works correctly from opencode-managed worktrees that pin a branch.
 #>
 
 Set-StrictMode -Version Latest
@@ -27,10 +30,17 @@ if (Test-Path $lib) { . $lib }
 
 $Branches = @(
     'local/find-fitt-tools'
-    'local/mtp-debug-helpers'
+    'local/webui-wsl-build'
     # Add more as you create them
     # 'topic/mtp-pr-22673'    # only if you want it in the build target
 )
+
+# Ensure we're on local/integrated. In a worktree, the branch is already
+# checked out. In the main working tree, we may need to switch.
+$currentBranch = git rev-parse --abbrev-ref HEAD
+if ($currentBranch -ne 'local/integrated') {
+    Write-Warning "Expected branch 'local/integrated', got '$currentBranch'. Continuing anyway."
+}
 
 git fetch upstream
 if ($LASTEXITCODE -ne 0) { throw "fetch failed" }
@@ -49,28 +59,36 @@ master has diverged from upstream/master; refusing to continue.
   upstream      = $upstreamMaster
   merge-base    = $mergeBase
 
-Both sides have unique commits, so 'git merge --ff-only upstream/master' would
-fail and the script would halt anyway. To recover:
+Both sides have unique commits, so master cannot fast-forward to upstream/master.
+To recover:
 
-    git checkout master
-    git reset --hard upstream/master
+    git update-ref refs/heads/master $upstreamMaster
     git checkout local/integrated
     git rebase master
     git push --force-with-lease origin local/integrated
 
-The 1 local-only commit on master (if any) is already preserved on
-local/integrated because that branch was created from master, so it survives
-the reset. Then re-run this script.
+Any local-only commits on master are already preserved on local/integrated
+because that branch was created from master, so they survive the reset.
+Then re-run this script.
 "@
 }
 
-git checkout master
-git merge --ff-only upstream/master
-if ($LASTEXITCODE -ne 0) { throw "master FF failed; resolve manually" }
+# Update master to upstream/master using plumbing commands (worktree-safe).
+# This avoids 'git checkout master' which fails in a pinned worktree.
+if ($localMaster -ne $upstreamMaster) {
+    # Verify master is behind or equal to upstream (FF-safe)
+    if ($localMaster -ne $mergeBase) {
+        throw "master has commits not on upstream/master; cannot fast-forward. Reset master manually."
+    }
+    git update-ref refs/heads/master $upstreamMaster
+    Write-Host "Updated master to $($upstreamMaster.Substring(0, 7))" -ForegroundColor Cyan
+} else {
+    Write-Host "master already at $($upstreamMaster.Substring(0, 7))" -ForegroundColor Gray
+}
 
-git checkout local/integrated
+# Rebase local/integrated on updated master
 git rebase master
-if ($LASTEXITCODE -ne 0) { throw "rebase local/integrated on master failed; resolve, then run this script again" }
+if ($LASTEXITCODE -ne 0) { throw "rebase local/integrated on master failed; resolve, then 'git rebase --continue' and re-run this script" }
 
 foreach ($b in $Branches) {
     git show-ref --verify --quiet "refs/heads/$b"
