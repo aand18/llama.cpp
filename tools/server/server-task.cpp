@@ -167,10 +167,26 @@ common_chat_msg task_result_state::update_chat_msg(
     generated_text += text_added;
     auto msg_prv_copy = chat_msg;
     //SRV_DBG("Parsing chat message: %s\n", generated_text.c_str());
-    auto new_msg = common_chat_parse(
-        generated_text,
-        is_partial,
-        chat_parser_params);
+    common_chat_msg new_msg;
+    try {
+        new_msg = common_chat_parse(generated_text, is_partial, chat_parser_params);
+    } catch (const std::exception & e) {
+        // UnbiasedStrata: the engine samples unconstrained (the tool grammar is parsing-only), so a malformed call
+        // reaches the parser. Hand the raw text back as content instead of failing the request (issue #17).
+        SRV_WRN("chat parse failed (%s); returning the raw text as content:\n=== BEGIN ===\n%s\n=== END ===\n",
+                e.what(), generated_text.c_str());
+        new_msg.role    = "assistant";
+        new_msg.content = generated_text;
+    }
+    if (is_partial && new_msg.tool_calls.size() < chat_msg.tool_calls.size()) {
+        // UnbiasedStrata: a partial re-parse that loses a tool call (the function rule is atomic, so one token the
+        // grammar does not expect after the last argument wipes the whole call) is not progress. Keep the previous
+        // message and emit nothing for this token; the final, non-partial parse decides (issue #17).
+        SRV_WRN("partial chat parse dropped from %zu to %zu tool calls; holding the delta. Raw text:\n=== BEGIN ===\n%s\n=== END ===\n",
+                chat_msg.tool_calls.size(), new_msg.tool_calls.size(), generated_text.c_str());
+        diffs.clear();
+        return chat_msg;
+    }
     if (!new_msg.empty()) {
         new_msg.set_tool_call_ids(generated_tool_call_ids, gen_tool_call_id);
         chat_msg = new_msg;
