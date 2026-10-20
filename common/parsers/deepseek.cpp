@@ -178,20 +178,18 @@ common_chat_params common_chat_params_init_deepseek_v3_2(const common_chat_templ
                     }
                 });
 
-                common_peg_parser args_seq = p.eps();
-                for (size_t i = 0; i < required_parsers.size(); i++) {
-                    if (i > 0) {
-                        args_seq = args_seq + p.space();
-                    }
-                    args_seq = args_seq + required_parsers[i];
+                // UnbiasedStrata 2: every argument in any order (see common/chat-auto-parser-generator.cpp for the reason:
+                // this engine samples unconstrained, and DeepSeek V4 Flash writes `content` before `path`).
+                common_peg_parser any_arg = p.choice();
+                for (const auto & req : required_parsers) {
+                    any_arg |= req;
                 }
-
-                if (!optional_parsers.empty()) {
-                    common_peg_parser any_opt = p.choice();
-                    for (const auto & opt : optional_parsers) {
-                        any_opt |= opt;
-                    }
-                    args_seq = args_seq + p.repeat(p.space() + any_opt, 0, -1);
+                for (const auto & opt : optional_parsers) {
+                    any_arg |= opt;
+                }
+                common_peg_parser args_seq = p.eps();
+                if (!required_parsers.empty() || !optional_parsers.empty()) {
+                    args_seq = p.repeat(p.space() + any_arg, required_parsers.empty() ? 0 : 1, -1);
                 }
 
                 common_peg_parser invoke_body = args_seq;

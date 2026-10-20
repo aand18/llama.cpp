@@ -391,22 +391,21 @@ common_peg_parser analyze_tools::build_tool_parser_tag_tagged(parser_build_conte
             }
         });
 
-        // Build required arg sequence in definition order
-        common_peg_parser args_seq = p.eps();
-        for (size_t i = 0; i < required_parsers.size(); i++) {
-            if (i > 0) {
-                args_seq = args_seq + p.space();
-            }
-            args_seq = args_seq + required_parsers[i];
+        // UnbiasedStrata 2: every argument, required or optional, in any order. Upstream requires the required
+        // arguments in the schema's order, which holds when its sampler is constrained by this grammar; here the
+        // engine samples unconstrained and DeepSeek V4 Flash and GLM 5.3 Flash write `content` before `path` for a
+        // `write` tool that declares `path` first, so the finished, well-formed call failed to parse. A missing
+        // required argument is left for the client to report, as it is for optional-only tools.
+        common_peg_parser any_arg = p.choice();
+        for (const auto & req : required_parsers) {
+            any_arg |= req;
         }
-
-        // Build optional args with flexible ordering
-        if (!optional_parsers.empty()) {
-            common_peg_parser any_opt = p.choice();
-            for (const auto & opt : optional_parsers) {
-                any_opt |= opt;
-            }
-            args_seq = args_seq + p.repeat(p.space() + any_opt, 0, -1);
+        for (const auto & opt : optional_parsers) {
+            any_arg |= opt;
+        }
+        common_peg_parser args_seq = p.eps();
+        if (!required_parsers.empty() || !optional_parsers.empty()) {
+            args_seq = p.repeat(p.space() + any_arg, required_parsers.empty() ? 0 : 1, -1);
         }
 
         if (!arguments.start.empty()) {
