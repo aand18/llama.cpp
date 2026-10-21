@@ -3572,6 +3572,36 @@ static void test_template_output_peg_parsers(bool detailed_debug) {
             .expect(message_assist_call)
             .run();
 
+        // UnbiasedStrata: the same shard leaves a blank line between the last `</parameter>` and `</function>`, and
+        // between `</function>` and `</tool_call>` (memcached-bisect-deep, 2026-10-21). Blank lines are skipped.
+        tst.test(
+               "<tool_call>\n"
+               "<function=special_function>\n"
+               "<parameter=arg1>\n"
+               "1\n"
+               "</parameter>\n"
+               "\n"
+               "</function>\n"
+               "</tool_call>")
+            .tools({ special_function_tool })
+            .expect(message_assist_call)
+            .run();
+
+        tst.test(
+               "<tool_call>\n"
+               "<function=special_function>\n"
+               "<parameter=arg1>\n"
+               "1\n"
+               "</parameter>\n"
+               "\n"
+               "\n"
+               "</function>\n"
+               "\n"
+               "</tool_call>")
+            .tools({ special_function_tool })
+            .expect(message_assist_call)
+            .run();
+
         // Some models skip the opening <tool_call> and go straight to <function=>
         tst.test(
                "<function=special_function>\n"

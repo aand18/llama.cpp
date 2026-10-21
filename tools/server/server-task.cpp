@@ -178,12 +178,14 @@ common_chat_msg task_result_state::update_chat_msg(
         new_msg.role    = "assistant";
         new_msg.content = generated_text;
     }
-    if (is_partial && new_msg.tool_calls.size() < chat_msg.tool_calls.size()) {
-        // UnbiasedStrata: a partial re-parse that loses a tool call (the function rule is atomic, so one token the
-        // grammar does not expect after the last argument wipes the whole call) is not progress. Keep the previous
-        // message and emit nothing for this token; the final, non-partial parse decides (issue #17).
-        SRV_WRN("partial chat parse dropped from %zu to %zu tool calls; holding the delta. Raw text:\n=== BEGIN ===\n%s\n=== END ===\n",
-                chat_msg.tool_calls.size(), new_msg.tool_calls.size(), generated_text.c_str());
+    if (new_msg.tool_calls.size() < chat_msg.tool_calls.size()) {
+        // UnbiasedStrata: a re-parse that loses a tool call (the function rule is atomic, so one token the grammar
+        // does not expect after the last argument wipes the whole call) is not progress. Partial: keep the previous
+        // message and emit nothing for this token. Final: the calls already streamed stand, with the arguments as
+        // last parsed; compute_diffs would otherwise throw and the stream would end in a 500 (issue #17).
+        SRV_WRN("%s chat parse dropped from %zu to %zu tool calls; %s. Raw text:\n=== BEGIN ===\n%s\n=== END ===\n",
+                is_partial ? "partial" : "final", chat_msg.tool_calls.size(), new_msg.tool_calls.size(),
+                is_partial ? "holding the delta" : "keeping the streamed calls", generated_text.c_str());
         diffs.clear();
         return chat_msg;
     }

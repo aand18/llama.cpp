@@ -153,7 +153,11 @@ common_chat_params common_chat_params_init_qwen3_coder(const common_chat_templat
                 // close. Without this the whole call failed to parse: the partial parse had already streamed it,
                 // so the diff check threw and the request ended with a 500 mid-stream (issue #17).
                 auto stray_close = p.literal("</parameter>\n");
-                auto args = all_args.empty() ? p.eps() : p.zero_or_more(p.choice(all_args) | stray_close);
+                // The same shard also leaves a blank line between the last `</parameter>` and `</function>`
+                // (memcached-bisect-deep, 2026-10-21): the function rule is atomic, so that one newline wiped the
+                // whole call. Blank lines between arguments and before the close are skipped.
+                auto blank_line  = p.literal("\n");
+                auto args = all_args.empty() ? p.eps() : p.zero_or_more(p.choice(all_args) | stray_close | blank_line);
 
                 auto func = p.tool(p.tool_open("<function=" + p.tool_name(p.literal(name)) + ">\n") +
                                    p.tool_args(args) +
@@ -164,7 +168,7 @@ common_chat_params common_chat_params_init_qwen3_coder(const common_chat_templat
 
             auto min_calls = inputs.tool_choice == COMMON_CHAT_TOOL_CHOICE_REQUIRED ? 1 : 0;
 
-            auto tool_call_body = tool_choice + "</tool_call>" + p.space();
+            auto tool_call_body = tool_choice + p.space() + "</tool_call>" + p.space();
             auto tool_call      = p.rule("tool-call", "<tool_call>\n" + tool_call_body);
 
             // Qwen3-Coder models may occasionally omit the <tool_call> token.
