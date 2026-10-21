@@ -3556,6 +3556,22 @@ static void test_template_output_peg_parsers(bool detailed_debug) {
             .expect_reconstruction()
             .run();
 
+        // UnbiasedStrata: a stuttered close tag. Qwen3.8 Flash-Next Coder IQ1_M, sampled without the grammar, writes
+        // `</parameter>` twice before `</function>` in about 1 % of its calls; the value ends at the first close and the
+        // stray tag is skipped (it used to wipe the whole call from the partial parse, then fail the stream).
+        tst.test(
+               "<tool_call>\n"
+               "<function=special_function>\n"
+               "<parameter=arg1>\n"
+               "1\n"
+               "</parameter>\n"
+               "</parameter>\n"
+               "</function>\n"
+               "</tool_call>")
+            .tools({ special_function_tool })
+            .expect(message_assist_call)
+            .run();
+
         // Some models skip the opening <tool_call> and go straight to <function=>
         tst.test(
                "<function=special_function>\n"

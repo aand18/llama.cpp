@@ -147,7 +147,13 @@ common_chat_params common_chat_params_init_qwen3_coder(const common_chat_templat
                 // is present is for the tool to report; a dropped call reports nothing.
                 std::vector<common_peg_parser> all_args = required_args;
                 all_args.insert(all_args.end(), optional_args.begin(), optional_args.end());
-                auto args = all_args.empty() ? p.eps() : p.zero_or_more(p.choice(all_args));
+                // UnbiasedStrata: a stuttered close tag. Qwen3.8 Flash-Next Coder IQ1_M, sampled without this
+                // grammar, writes `</parameter>` twice before `</function>` in about 1 % of its calls (7 of 673
+                // requests in a BBW run, 2026-10-20). The stray tag is skipped; the value still ends at the first
+                // close. Without this the whole call failed to parse: the partial parse had already streamed it,
+                // so the diff check threw and the request ended with a 500 mid-stream (issue #17).
+                auto stray_close = p.literal("</parameter>\n");
+                auto args = all_args.empty() ? p.eps() : p.zero_or_more(p.choice(all_args) | stray_close);
 
                 auto func = p.tool(p.tool_open("<function=" + p.tool_name(p.literal(name)) + ">\n") +
                                    p.tool_args(args) +
