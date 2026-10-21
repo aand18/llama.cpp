@@ -152,10 +152,11 @@ common_chat_params common_chat_params_init_qwen3_coder(const common_chat_templat
                 // requests in a BBW run, 2026-10-20). The stray tag is skipped; the value still ends at the first
                 // close. Without this the whole call failed to parse: the partial parse had already streamed it,
                 // so the diff check threw and the request ended with a 500 mid-stream (issue #17).
-                auto stray_close = p.literal("</parameter>\n");
-                // The same shard also leaves a blank line between the last `</parameter>` and `</function>`
-                // (memcached-bisect-deep, 2026-10-21): the function rule is atomic, so that one newline wiped the
-                // whole call. Blank lines between arguments and before the close are skipped.
+                // Generalised 2026-10-21 after the third shape of the slip (prime-frontend: `</parameter>`,
+                // `</content>`, `</invoke>`, a blank line, `</parameter>` again, then `</function>`): any close tag
+                // that is not `</function>` or `</tool_call>` is skipped between arguments, as is a blank line.
+                auto stray_close = p.negate(p.literal("</function>")) + p.negate(p.literal("</tool_call>")) +
+                                   p.literal("</") + p.chars("[a-zA-Z_]") + p.literal(">\n");
                 auto blank_line  = p.literal("\n");
                 auto args = all_args.empty() ? p.eps() : p.zero_or_more(p.choice(all_args) | stray_close | blank_line);
 

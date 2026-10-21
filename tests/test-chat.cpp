@@ -3602,6 +3602,25 @@ static void test_template_output_peg_parsers(bool detailed_debug) {
             .expect(message_assist_call)
             .run();
 
+        // UnbiasedStrata: the third shape (prime-frontend, 2026-10-21): stray close tags of other tool-call
+        // dialects after the real close, then a blank line and a second `</parameter>`. Any close tag that is not
+        // `</function>` or `</tool_call>` is skipped between arguments.
+        tst.test(
+               "<tool_call>\n"
+               "<function=special_function>\n"
+               "<parameter=arg1>\n"
+               "1\n"
+               "</parameter>\n"
+               "</content>\n"
+               "</invoke>\n"
+               "\n"
+               "</parameter>\n"
+               "</function>\n"
+               "</tool_call>")
+            .tools({ special_function_tool })
+            .expect(message_assist_call)
+            .run();
+
         // Some models skip the opening <tool_call> and go straight to <function=>
         tst.test(
                "<function=special_function>\n"
