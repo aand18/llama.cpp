@@ -109,7 +109,21 @@ common_chat_params common_chat_params_init_qwen3_coder(const common_chat_templat
 
                     auto arg_value = p.eps();
                     if (!types.has(common_chat_schema::TYPE_STRING)) {
-                        arg_value = p.tool_arg_json_value(p.schema(p.json(), rule_name + "-schema", doc, *param.schema)) + arg_close;
+                        // The model writes Python-cased literals for typed arguments (background=True),
+                        // and one unmatched literal dropped the whole call. Try the schema-typed JSON
+                        // first, then the Python-cased literal; the mapper normalizes it back to JSON.
+                        auto strict  = p.schema(p.json(), rule_name + "-schema", doc, *param.schema);
+                        auto lenient = p.choice();
+                        bool has_lenient = false;
+                        if (types.has(common_chat_schema::TYPE_BOOLEAN)) {
+                            lenient |= p.python_bool();
+                            has_lenient = true;
+                        }
+                        if (types.has(common_chat_schema::TYPE_NULL)) {
+                            lenient |= p.python_null();
+                            has_lenient = true;
+                        }
+                        arg_value = p.tool_arg_json_value(has_lenient ? (strict | lenient) : strict) + arg_close;
                     } else if (types.is_only(common_chat_schema::TYPE_STRING)) {
                         arg_value = arg_string;
                     } else {
